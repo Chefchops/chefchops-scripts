@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+
+    <style>
+      /* ================================
+         BASE LAYOUT
+      ================================== */
+      body {
+        font-family: Arial, sans-serif;
+        background: #f3f4f6;
+        margin: 0;
+        padding: 20px;
+        color: #1f2937;
+      }
+
+      .wrap {
+        max-width: 1000px;
+        margin: 0 auto;
+      }
+
+      /* ================================
+         HEADER
+      ================================== */
+      .title {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 6px;
+        color: #111827;
+      }
+
+      .sub {
+        font-size: 14px;
+        color: #4b5563;
+        margin-bottom: 20px;
+      }
+
+      /* ================================
+         SEARCH BAR
+      ================================== */
+      .search-bar {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .search-bar input {
+        flex: 1;
+        padding: 14px 16px;
+        font-size: 16px;
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        outline: none;
+        background: #ffffff;
+        color: #111827;
+      }
+
+      .search-bar input:focus {
+        border-color: #15803d;
+        box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.12);
+      }
+
+      .search-bar button {
+        padding: 14px 20px;
+        font-size: 15px;
+        font-weight: 700;
+        border: none;
+        border-radius: 12px;
+        background: #15803d;
+        color: #ffffff;
+        cursor: pointer;
+      }
+
+      .search-bar button:hover {
+        background: #166534;
+      }
+
+      /* ================================
+         SUMMARY
+      ================================== */
+      .summary {
+        margin-bottom: 16px;
+        font-size: 14px;
+        color: #374151;
+      }
+
+      /* ================================
+         RESULTS WRAP
+      ================================== */
+      .results {
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* ================================
+         RESULT CARD
+      ================================== */
+      .card {
+        position: relative;
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 18px;
+        border: 1px solid #d1d5db;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.10);
+        margin-bottom: 18px;
+      }
+
+      .card.best {
+        border: 2px solid #15803d;
+        background: #ecfdf5;
+        box-shadow: 0 6px 18px rgba(21, 128, 61, 0.18);
+      }
+
+      .card:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        left: 4%;
+        bottom: -10px;
+        width: 92%;
+        border-bottom: 2px dashed #9ca3af;
+      }
+
+      /* ================================
+         CARD HEADER
+      ================================== */
+      .top-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .ingredient {
+        font-size: 20px;
+        font-weight: 700;
+        color: #111827;
+        line-height: 1.2;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: #16a34a;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.3px;
+      }
+
+      /* ================================
+         SUPPLIER
+      ================================== */
+      .supplier-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+
+      .supplier-label {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #4b5563;
+        letter-spacing: 0.4px;
+      }
+
+      .supplier-pill {
+        display: inline-block;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: #111827;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+
+      .supplier-pill.best {
+        background: #15803d;
+      }
+
+      /* ================================
+         DATA GRID
+      ================================== */
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 12px;
+      }
+
+      .field {
+        background: #f3f4f6;
+        border: 1px solid #d1d5db;
+        border-radius: 12px;
+        padding: 12px;
+      }
+
+      .label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #4b5563;
+        margin-bottom: 5px;
+        letter-spacing: 0.3px;
+      }
+
+      .value {
+        font-size: 15px;
+        font-weight: 700;
+        color: #111827;
+      }
+
+      /* ================================
+         STATES
+      ================================== */
+      .empty,
+      .loading,
+      .error {
+        background: #ffffff;
+        border: 1px solid #d1d5db;
+        border-radius: 14px;
+        padding: 18px;
+      }
+
+      .loading {
+        color: #374151;
+      }
+
+      .error {
+        color: #b91c1c;
+        background: #fef2f2;
+        border-color: #fecaca;
+      }
+
+      /* ================================
+         RESPONSIVE
+      ================================== */
+      @media (max-width: 700px) {
+        .search-bar {
+          flex-direction: column;
+        }
+
+        .top-row {
+          flex-direction: column;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <div class="title">Best Price Search</div>
+      <div class="sub">Find the cheapest supplier instantly.</div>
+
+      <div class="search-bar">
+        <input type="text" id="searchText" placeholder="Search e.g. mayonnaise">
+        <button type="button" onclick="runSearch()">Search</button>
+      </div>
+
+      <div id="summary" class="summary"></div>
+      <div id="results">
+        <div class="empty">Type a product name above to search.</div>
+      </div>
+    </div>
+
+    <script>
+      function currency(value) {
+        return '£' + Number(value || 0).toFixed(4);
+      }
+
+      function escapeHtml(text) {
+        return String(text || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function runSearch() {
+        const term = document.getElementById('searchText').value.trim();
+        const resultsEl = document.getElementById('results');
+        const summaryEl = document.getElementById('summary');
+
+        if (!term) {
+          summaryEl.innerHTML = '';
+          resultsEl.innerHTML = '<div class="empty">Type something to search.</div>';
+          return;
+        }
+
+        summaryEl.innerHTML = '';
+        resultsEl.innerHTML = '<div class="loading">Searching...</div>';
+
+        google.script.run
+          .withSuccessHandler(renderResults)
+          .withFailureHandler(renderError)
+          .searchBestPrices(term);
+      }
+
+      function renderResults(results) {
+        const resultsEl = document.getElementById('results');
+        const summaryEl = document.getElementById('summary');
+
+        if (!results || !results.length) {
+          summaryEl.innerHTML = 'No matches found.';
+          resultsEl.innerHTML = '<div class="empty">No matching products found.</div>';
+          return;
+        }
+
+        const best = results[0];
+
+        summaryEl.innerHTML =
+          '<strong>Best result:</strong> ' +
+          escapeHtml(best.ingredient) +
+          ' from <strong>' + escapeHtml(best.supplier) + '</strong> at ' +
+          '<strong>' + currency(best.costPerUnit) + '</strong> per ' +
+          escapeHtml(best.baseUnit);
+
+        let html = '<div class="results">';
+
+        results.forEach(function(r) {
+          html +=
+            '<div class="card ' + (r.isBest ? 'best' : '') + '">' +
+              '<div class="top-row">' +
+                '<div>' +
+                  '<div class="ingredient">' + escapeHtml(r.ingredient) + '</div>' +
+                  '<div class="supplier-row">' +
+                    '<span class="supplier-label">Supplier</span>' +
+                    '<span class="supplier-pill ' + (r.isBest ? 'best' : '') + '">' +
+                      escapeHtml(r.supplier) +
+                    '</span>' +
+                  '</div>' +
+                '</div>' +
+                (r.isBest ? '<div class="badge">BEST PRICE</div>' : '') +
+              '</div>' +
+
+              '<div class="grid">' +
+                '<div class="field">' +
+                  '<div class="label">Cost per Unit</div>' +
+                  '<div class="value">' + currency(r.costPerUnit) + ' / ' + escapeHtml(r.baseUnit) + '</div>' +
+                '</div>' +
+
+                '<div class="field">' +
+                  '<div class="label">Pack Price</div>' +
+                  '<div class="value">' + currency(r.packPrice) + '</div>' +
+                '</div>' +
+
+                '<div class="field">' +
+                  '<div class="label">Pack Size</div>' +
+                  '<div class="value">' + escapeHtml(r.packSize) + '</div>' +
+                '</div>' +
+
+                '<div class="field">' +
+                  '<div class="label">Pack Qty</div>' +
+                  '<div class="value">' + escapeHtml(r.packQty) + '</div>' +
+                '</div>' +
+
+                '<div class="field">' +
+                  '<div class="label">Ingredient ID</div>' +
+                  '<div class="value">' + escapeHtml(r.ingredientId) + '</div>' +
+                '</div>' +
+
+                '<div class="field">' +
+                  '<div class="label">Item Code</div>' +
+                  '<div class="value">' + escapeHtml(r.itemCode) + '</div>' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+        });
+
+        html += '</div>';
+        resultsEl.innerHTML = html;
+      }
+
+      function renderError(error) {
+        const resultsEl = document.getElementById('results');
+        const summaryEl = document.getElementById('summary');
+
+        summaryEl.innerHTML = '';
+        resultsEl.innerHTML =
+          '<div class="error">Error: ' +
+          escapeHtml(error && error.message ? error.message : String(error)) +
+          '</div>';
+      }
+
+      document.getElementById('searchText').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          runSearch();
+        }
+      });
+    </script>
+  </body>
+</html>
