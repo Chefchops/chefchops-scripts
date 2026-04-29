@@ -1,3 +1,91 @@
+
+
+/////////////////////////////////////
+// APPEND PDF EXTRACTED LINES TO INGREDIENTS MASTER
+/////////////////////////////////////
+
+function appendPdfExtractedLinesToIngredientsMaster() {
+  const ss = SpreadsheetApp.getActive();
+  const ui = SpreadsheetApp.getUi();
+
+  const stagingSheet = ss.getSheetByName('PDF Staging');
+  const extractedSheet = ss.getSheetByName('PDF Extracted Lines');
+  const reviewSheet = ss.getSheetByName('PDF Review');
+  const masterSheet = ss.getSheetByName('Ingredients Master');
+
+  if (!stagingSheet || !extractedSheet || !reviewSheet || !masterSheet) {
+    ui.alert('Missing required sheet.');
+    return;
+  }
+
+  const stagingHeaders = getHeaderMap_(stagingSheet, 1);
+  const extractedHeaders = getHeaderMap_(extractedSheet, 1);
+  const reviewHeaders = getHeaderMap_(reviewSheet, 1);
+
+  const fileIdCol = getRequiredHeader_(stagingHeaders, 'Drive File ID', 'PDF Staging');
+  const apiStatusCol = getRequiredHeader_(stagingHeaders, 'API Status', 'PDF Staging');
+
+  const lastRow = stagingSheet.getLastRow();
+  if (lastRow < 2) {
+    ui.alert('No PDF Staging rows.');
+    return;
+  }
+
+  const fileId = stagingSheet.getRange(lastRow, fileIdCol).getValue();
+  const apiStatus = stagingSheet.getRange(lastRow, apiStatusCol).getValue();
+
+  /////////////////////////////////////
+  // CHECK CLOUD DONE
+  /////////////////////////////////////
+
+  if (apiStatus !== 'DONE') {
+    ui.alert('Cloud processing not complete.');
+    return;
+  }
+
+  /////////////////////////////////////
+  // CHECK APPEND STATUS
+  /////////////////////////////////////
+
+  const appendStatus = getPdfAppendStatusForFile_(fileId);
+
+  if (appendStatus === 'DONE') {
+    ui.alert('This PDF has already been appended.');
+    return;
+  }
+
+  /////////////////////////////////////
+  // CHECK REVIEW CLEAN
+  /////////////////////////////////////
+
+  const reviewValues = reviewSheet.getDataRange().getValues();
+  const reviewHeadersMap = getHeaderMap_(reviewSheet, 1);
+
+  const reviewFileCol = getRequiredHeader_(reviewHeadersMap, 'Drive File ID', 'PDF Review');
+  const reviewStatusCol = getRequiredHeader_(reviewHeadersMap, 'Review Status', 'PDF Review');
+
+  for (let i = 1; i < reviewValues.length; i++) {
+    const rowFileId = reviewValues[i][reviewFileCol - 1];
+    const status = reviewValues[i][reviewStatusCol - 1];
+
+    if (
+      (rowFileId || '').toString().trim() === fileId.toString().trim() &&
+      status === 'Pending'
+    ) {
+      ui.alert('Review not complete. Resolve all rows before append.');
+      return;
+    }
+  }
+
+  /////////////////////////////////////
+  // READY TO APPEND
+  /////////////////////////////////////
+
+  ui.alert('Ready for append (next step builds logic)');
+}
+
+
+
 /////////////////////////////////////
 // APPEND PDF EXTRACTED LINES TO INGREDIENTS MASTER
 // NEW PIPELINE: PDF Extracted Lines -> Ingredients Master
