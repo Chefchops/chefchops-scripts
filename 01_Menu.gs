@@ -30,7 +30,7 @@ function buildChefchopsMenu_() {
 
         .addSeparator()
 
-        .addItem('4. Append Approved PDF Rows to Ingredients Master', 'appendPdfExtractedLinesToIngredientsMaster')
+        .addItem('4. Build Invoice Import From PDF Review', 'buildInvoiceImportFromPdfReview')
     )
 
     /////////////////////////////////////
