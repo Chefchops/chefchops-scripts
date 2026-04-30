@@ -1,6 +1,11 @@
 /////////////////////////////////////
 // APPEND REVIEWED PDF TO INGREDIENTS MASTER
 // FINAL PIPELINE: Extracted Lines -> Master
+//
+// IMPORTANT MAPPING RULE:
+// Pack Price (£) = Unit Price
+// Line Total     = Line Total
+// Cases          = Cases
 /////////////////////////////////////
 
 function appendReviewedPdfExtractedLinesToIngredientsMaster() {
@@ -31,7 +36,7 @@ function appendReviewedPdfExtractedLinesToIngredientsMaster() {
 
   const response = ui.alert(
     'Append PDF to Ingredients Master?',
-    'This will update and append ingredients.',
+    'This will update and append ingredients.\n\nPack Price will be taken from Unit Price, not Line Total.',
     ui.ButtonSet.YES_NO
   );
 
@@ -40,8 +45,15 @@ function appendReviewedPdfExtractedLinesToIngredientsMaster() {
   const extractedHeaders = getHeaderMap_(extractedSheet, 1);
   const masterHeaders = getHeaderMap_(masterSheet, 1);
 
+  const lastExtractedRow = extractedSheet.getLastRow();
+
+  if (lastExtractedRow < 2) {
+    ui.alert('No rows found on PDF Extracted Lines.');
+    return;
+  }
+
   const extractedValues = extractedSheet
-    .getRange(2, 1, extractedSheet.getLastRow() - 1, extractedSheet.getLastColumn())
+    .getRange(2, 1, lastExtractedRow - 1, extractedSheet.getLastColumn())
     .getValues();
 
   const masterValues = masterSheet.getLastRow() > 1
@@ -55,11 +67,14 @@ function appendReviewedPdfExtractedLinesToIngredientsMaster() {
   let ignored = 0;
   let skipped = 0;
 
-  extractedValues.forEach(row => {
+  extractedValues.forEach(function(row) {
     const rowFileId = getValueByHeader_(row, extractedHeaders, 'Drive File ID');
-    if (rowFileId !== fileId) return;
 
-    const reviewFlag = (getValueByHeader_(row, extractedHeaders, 'Review Flag') || '').toString().trim();
+    if ((rowFileId || '').toString().trim() !== fileId.toString().trim()) return;
+
+    const reviewFlag = (getValueByHeader_(row, extractedHeaders, 'Review Flag') || '')
+      .toString()
+      .trim();
 
     if (reviewFlag === 'IGNORE') {
       ignored++;
@@ -71,9 +86,14 @@ function appendReviewedPdfExtractedLinesToIngredientsMaster() {
     const itemCode = getValueByHeader_(row, extractedHeaders, 'Item Code');
     const packSize = getValueByHeader_(row, extractedHeaders, 'Pack Size');
     const baseUnit = getValueByHeader_(row, extractedHeaders, 'Base Unit');
-    const packPrice =
-      getValueByHeader_(row, extractedHeaders, 'Line Total') ||
-      getValueByHeader_(row, extractedHeaders, 'Unit Price');
+
+    /////////////////////////////////////
+    // CORRECT PRICE MAPPING
+    /////////////////////////////////////
+
+    const cases = getValueByHeader_(row, extractedHeaders, 'Cases');
+    const packPrice = getValueByHeader_(row, extractedHeaders, 'Unit Price');
+    const lineTotal = getValueByHeader_(row, extractedHeaders, 'Line Total');
 
     if (!description || !supplier || !packSize || !packPrice) {
       skipped++;
@@ -90,19 +110,31 @@ function appendReviewedPdfExtractedLinesToIngredientsMaster() {
         ? masterLookup.byCode[codeKey]
         : masterLookup.byFallback[fallbackKey];
 
+    const data = {
+      supplier: supplier,
+      itemCode: itemCode,
+      description: description,
+      cleanName: cleanName,
+      packSize: packSize,
+      baseUnit: baseUnit,
+      packPrice: packPrice,
+      cases: cases,
+      lineTotal: lineTotal
+    };
+
     if (existingRow) {
       updateIngredientsMasterFromPdfRow_(
         masterSheet,
         masterHeaders,
         existingRow,
-        { supplier, itemCode, description, cleanName, packSize, baseUnit, packPrice }
+        data
       );
       updated++;
     } else {
       appendIngredientsMasterFromPdfRow_(
         masterSheet,
         masterHeaders,
-        { supplier, itemCode, description, cleanName, packSize, baseUnit, packPrice }
+        data
       );
       appended++;
     }
@@ -113,7 +145,8 @@ function appendReviewedPdfExtractedLinesToIngredientsMaster() {
     'Updated: ' + updated + '\n' +
     'Appended: ' + appended + '\n' +
     'Ignored: ' + ignored + '\n' +
-    'Skipped: ' + skipped
+    'Skipped: ' + skipped + '\n\n' +
+    'Pack Price mapped from Unit Price.'
   );
 }
 
@@ -133,6 +166,7 @@ function getLatestPdfExtractedDriveFileId_() {
 
   return sheet.getRange(sheet.getLastRow(), fileIdCol).getValue();
 }
+
 
 function hasBlockingPdfReviewRows_(reviewSheet, fileId) {
   const lastRow = reviewSheet.getLastRow();
@@ -156,6 +190,7 @@ function hasBlockingPdfReviewRows_(reviewSheet, fileId) {
     );
   });
 }
+
 
 /////////////////////////////////////
 // BUILD INGREDIENTS MASTER LOOKUP
@@ -191,6 +226,7 @@ function buildIngredientsMasterLookup_(masterValues, masterHeaders) {
   return lookup;
 }
 
+
 /////////////////////////////////////
 // MATCHING HELPERS
 /////////////////////////////////////
@@ -202,6 +238,7 @@ function makePdfMasterCodeKey_(supplier, itemCode) {
   ].join('|');
 }
 
+
 function makePdfMasterFallbackKey_(supplier, cleanName, packSize, baseUnit) {
   return [
     normalisePdfKeyPart_(supplier),
@@ -211,6 +248,7 @@ function makePdfMasterFallbackKey_(supplier, cleanName, packSize, baseUnit) {
   ].join('|');
 }
 
+
 function normalisePdfKeyPart_(value) {
   return (value || '')
     .toString()
@@ -218,6 +256,7 @@ function normalisePdfKeyPart_(value) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
 
 /////////////////////////////////////
 // CLEAN INGREDIENT NAME FOR PDF APPEND
@@ -232,6 +271,7 @@ function cleanIngredientNameForPdfAppend_(name) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
 
 /////////////////////////////////////
 // APPEND NEW INGREDIENTS MASTER ROW
@@ -248,10 +288,11 @@ function appendIngredientsMasterFromPdfRow_(sheet, headers, data) {
     'Pack Price (£)': data.packPrice,
     'Base Unit': data.baseUnit,
     'Item Code': data.itemCode,
-    'Notes': 'Imported from reviewed PDF | ' + new Date()
+    'Notes': buildPdfAppendNote_('Imported from reviewed PDF', data)
   });
 
   const idCol = headers['Ingredient ID'];
+
   if (idCol) {
     newRow[idCol - 1] = makePdfIngredientId_();
   }
@@ -275,9 +316,23 @@ function updateIngredientsMasterFromPdfRow_(sheet, headers, rowNumber, data) {
     sheet,
     headers,
     rowNumber,
-    'Updated from reviewed PDF | ' + new Date()
+    buildPdfAppendNote_('Updated from reviewed PDF', data)
   );
 }
+
+
+/////////////////////////////////////
+// PDF APPEND NOTE
+/////////////////////////////////////
+
+function buildPdfAppendNote_(prefix, data) {
+  return prefix +
+    ' | Pack Price from Unit Price: £' + data.packPrice +
+    ' | Cases: ' + (data.cases || '') +
+    ' | Line Total: £' + (data.lineTotal || '') +
+    ' | ' + new Date();
+}
+
 
 /////////////////////////////////////
 // SAFE WRITE HELPERS
@@ -289,6 +344,7 @@ function setCellIfHeaderExists_(sheet, headers, rowNumber, headerName, value) {
 
   sheet.getRange(rowNumber, col).setValue(value);
 }
+
 
 function appendNoteIfHeaderExists_(sheet, headers, rowNumber, noteText) {
   const col = headers['Notes'];
@@ -308,6 +364,7 @@ function appendNoteIfHeaderExists_(sheet, headers, rowNumber, noteText) {
 
   cell.setValue(newValue);
 }
+
 
 function makePdfIngredientId_() {
   return 'ING-' + Utilities.getUuid().slice(0, 8).toUpperCase();
