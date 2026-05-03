@@ -34,6 +34,16 @@ function buildChefchopsMenu_() {
     )
 
     /////////////////////////////////////
+    // PDF HEADERS (NEW - IMPORTANT)
+    /////////////////////////////////////
+    .addSubMenu(
+      ui.createMenu('PDF Headers')
+
+        .addItem('Setup Headers Sheet', 'setupPdfInvoiceHeadersSheet')
+        .addItem('Build Latest Invoice Header', 'buildLatestPdfInvoiceHeader')
+    )
+
+    /////////////////////////////////////
     // PDF REVIEW
     /////////////////////////////////////
     .addSubMenu(

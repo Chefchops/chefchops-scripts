@@ -2,7 +2,12 @@
 // APPEND REVIEWED PDF TO INGREDIENTS MASTER
 // FINAL PIPELINE: Extracted Lines -> Master
 //
-// IMPORTANT MAPPING RULE:
+// INGREDIENTS MASTER HEADERS:
+// Ingredient ID | Item Code | Ingredient | Clean Name | Category | Product Group |
+// Supplier | Pack Size | Pack Qty | Pack Price (£) | Base Unit |
+// Cost per Unit (£) | Unit Per Pack/Case | Notes
+//
+// IMPORTANT MAPPING:
 // Pack Price (£) = Unit Price
 // Line Total     = Line Total
 // Cases          = Cases
@@ -28,9 +33,7 @@ function appendReviewedPdfExtractedLinesToIngredientsMaster() {
   }
 
   if (hasBlockingPdfReviewRows_(reviewSheet, fileId)) {
-    ui.alert(
-      'Cannot append.\n\nReview still has Pending or Needs Cloud Fix rows.'
-    );
+    ui.alert('Cannot append.\n\nReview still has Pending or Needs Cloud Fix rows.');
     return;
   }
 
@@ -85,19 +88,34 @@ function appendReviewedPdfExtractedLinesToIngredientsMaster() {
     const supplier = getValueByHeader_(row, extractedHeaders, 'Supplier');
     const itemCode = getValueByHeader_(row, extractedHeaders, 'Item Code');
     const packSize = getValueByHeader_(row, extractedHeaders, 'Pack Size');
-    const baseUnit = getValueByHeader_(row, extractedHeaders, 'Base Unit');
-
-    /////////////////////////////////////
-    // CORRECT PRICE MAPPING
-    /////////////////////////////////////
 
     const cases = getValueByHeader_(row, extractedHeaders, 'Cases');
-    const packPrice = getValueByHeader_(row, extractedHeaders, 'Unit Price');
+    const packPriceRaw = getValueByHeader_(row, extractedHeaders, 'Unit Price');
     const lineTotal = getValueByHeader_(row, extractedHeaders, 'Line Total');
+
+    const packPrice = toPdfNumber_(packPriceRaw);
 
     if (!description || !supplier || !packSize || !packPrice) {
       skipped++;
       return;
+    }
+
+    /////////////////////////////////////
+    // PACK SIZE PARSING
+    /////////////////////////////////////
+
+    const parsed = parsePackSizeToUnits_(packSize);
+
+    const baseUnitRaw = getValueByHeader_(row, extractedHeaders, 'Base Unit');
+    const baseUnit = parsed.baseUnit || baseUnitRaw || '';
+
+    const packQty = parsed.packQty || '';
+    const unitPerCase = parsed.unitPerCase || '';
+
+    let costPerUnit = '';
+
+    if (packPrice && unitPerCase) {
+      costPerUnit = packPrice / Number(unitPerCase);
     }
 
     const cleanName = cleanIngredientNameForPdfAppend_(description);
@@ -116,10 +134,15 @@ function appendReviewedPdfExtractedLinesToIngredientsMaster() {
       description: description,
       cleanName: cleanName,
       packSize: packSize,
-      baseUnit: baseUnit,
+      packQty: packQty,
       packPrice: packPrice,
+      baseUnit: baseUnit,
+      costPerUnit: costPerUnit,
+      unitPerCase: unitPerCase,
       cases: cases,
-      lineTotal: lineTotal
+      lineTotal: lineTotal,
+      packParseFlag: parsed.reviewFlag,
+      packParseNotes: parsed.notes
     };
 
     if (existingRow) {
@@ -139,6 +162,8 @@ function appendReviewedPdfExtractedLinesToIngredientsMaster() {
       appended++;
     }
   });
+
+  formatIngredientsMasterCostingColumns_();
 
   ui.alert(
     'Append complete\n\n' +
@@ -281,21 +306,19 @@ function appendIngredientsMasterFromPdfRow_(sheet, headers, data) {
   const newRow = new Array(sheet.getLastColumn()).fill('');
 
   setRowByHeaders_(newRow, headers, {
+    'Ingredient ID': makePdfIngredientId_(),
+    'Item Code': data.itemCode,
     'Ingredient': data.description,
     'Clean Name': data.cleanName,
     'Supplier': data.supplier,
     'Pack Size': data.packSize,
+    'Pack Qty': data.packQty,
     'Pack Price (£)': data.packPrice,
     'Base Unit': data.baseUnit,
-    'Item Code': data.itemCode,
+    'Cost per Unit (£)': data.costPerUnit,
+    'Unit Per Pack/Case': data.unitPerCase,
     'Notes': buildPdfAppendNote_('Imported from reviewed PDF', data)
   });
-
-  const idCol = headers['Ingredient ID'];
-
-  if (idCol) {
-    newRow[idCol - 1] = makePdfIngredientId_();
-  }
 
   sheet.appendRow(newRow);
 }
@@ -306,11 +329,14 @@ function appendIngredientsMasterFromPdfRow_(sheet, headers, data) {
 /////////////////////////////////////
 
 function updateIngredientsMasterFromPdfRow_(sheet, headers, rowNumber, data) {
-  setCellIfHeaderExists_(sheet, headers, rowNumber, 'Supplier', data.supplier);
   setCellIfHeaderExists_(sheet, headers, rowNumber, 'Item Code', data.itemCode);
+  setCellIfHeaderExists_(sheet, headers, rowNumber, 'Supplier', data.supplier);
   setCellIfHeaderExists_(sheet, headers, rowNumber, 'Pack Size', data.packSize);
+  setCellIfHeaderExists_(sheet, headers, rowNumber, 'Pack Qty', data.packQty);
   setCellIfHeaderExists_(sheet, headers, rowNumber, 'Pack Price (£)', data.packPrice);
   setCellIfHeaderExists_(sheet, headers, rowNumber, 'Base Unit', data.baseUnit);
+  setCellIfHeaderExists_(sheet, headers, rowNumber, 'Cost per Unit (£)', data.costPerUnit);
+  setCellIfHeaderExists_(sheet, headers, rowNumber, 'Unit Per Pack/Case', data.unitPerCase);
 
   appendNoteIfHeaderExists_(
     sheet,
@@ -326,11 +352,22 @@ function updateIngredientsMasterFromPdfRow_(sheet, headers, rowNumber, data) {
 /////////////////////////////////////
 
 function buildPdfAppendNote_(prefix, data) {
-  return prefix +
+  let note = prefix +
     ' | Pack Price from Unit Price: £' + data.packPrice +
     ' | Cases: ' + (data.cases || '') +
-    ' | Line Total: £' + (data.lineTotal || '') +
-    ' | ' + new Date();
+    ' | Line Total: £' + (data.lineTotal || '');
+
+  if (data.packParseFlag && data.packParseFlag !== 'OK') {
+    note += ' | Pack Parse: ' + data.packParseFlag;
+  }
+
+  if (data.packParseNotes) {
+    note += ' | ' + data.packParseNotes;
+  }
+
+  note += ' | ' + new Date();
+
+  return note;
 }
 
 
@@ -350,22 +387,56 @@ function appendNoteIfHeaderExists_(sheet, headers, rowNumber, noteText) {
   const col = headers['Notes'];
   if (!col) return;
 
-  const cell = sheet.getRange(rowNumber, col);
-  const existing = (cell.getValue() || '').toString();
-
-  const cleanExisting = existing
-    .replace(/\n/g, ' | ')
-    .replace(/\s*\|\s*\|\s*/g, ' | ')
-    .trim();
-
-  const newValue = cleanExisting
-    ? cleanExisting + ' | ' + noteText
-    : noteText;
-
-  cell.setValue(newValue);
+  sheet.getRange(rowNumber, col).setValue(noteText);
 }
 
 
 function makePdfIngredientId_() {
   return 'ING-' + Utilities.getUuid().slice(0, 8).toUpperCase();
+}
+
+
+function toPdfNumber_(value) {
+  if (value === null || value === undefined || value === '') return '';
+
+  const cleaned = value
+    .toString()
+    .replace(/[£,]/g, '')
+    .trim();
+
+  const num = Number(cleaned);
+
+  return isNaN(num) ? '' : num;
+}
+
+
+/////////////////////////////////////
+// FORMAT INGREDIENTS MASTER COSTING COLUMNS
+/////////////////////////////////////
+
+function formatIngredientsMasterCostingColumns_() {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName('Ingredients Master');
+
+  if (!sheet) return;
+
+  const headers = getHeaderMap_(sheet, 1);
+  const lastRow = Math.max(sheet.getLastRow(), 2);
+  const rowCount = lastRow - 1;
+
+  if (headers['Pack Qty']) {
+    sheet.getRange(2, headers['Pack Qty'], rowCount, 1).setNumberFormat('0.####');
+  }
+
+  if (headers['Pack Price (£)']) {
+    sheet.getRange(2, headers['Pack Price (£)'], rowCount, 1).setNumberFormat('£0.00');
+  }
+
+  if (headers['Cost per Unit (£)']) {
+    sheet.getRange(2, headers['Cost per Unit (£)'], rowCount, 1).setNumberFormat('£0.0000');
+  }
+
+  if (headers['Unit Per Pack/Case']) {
+    sheet.getRange(2, headers['Unit Per Pack/Case'], rowCount, 1).setNumberFormat('0.####');
+  }
 }

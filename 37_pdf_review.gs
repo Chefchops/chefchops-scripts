@@ -1,5 +1,6 @@
 /////////////////////////////////////
 // BUILD PDF REVIEW FROM EXTRACTED LINES
+// NOW ALSO CHECKS PACK SIZE PARSING
 /////////////////////////////////////
 
 function buildPdfReviewFromExtractedLines(fileId) {
@@ -79,7 +80,7 @@ function buildPdfReviewFromExtractedLines(fileId) {
   const output = [];
   const popupLines = [];
 
-  values.forEach(row => {
+  values.forEach(function(row) {
     const sourceFileId = getValueByHeader_(row, sourceHeaders, 'Drive File ID');
 
     if ((sourceFileId || '').toString().trim() !== fileId.toString().trim()) return;
@@ -91,24 +92,51 @@ function buildPdfReviewFromExtractedLines(fileId) {
     const unitsWeight = getValueByHeader_(row, sourceHeaders, 'Units / Weight');
     const description = getValueByHeader_(row, sourceHeaders, 'Description');
     const packSize = getValueByHeader_(row, sourceHeaders, 'Pack Size');
+    const itemCode = getValueByHeader_(row, sourceHeaders, 'Item Code');
     const unitPrice = getValueByHeader_(row, sourceHeaders, 'Unit Price');
+    const lineTotal = getValueByHeader_(row, sourceHeaders, 'Line Total');
 
     const missing = [];
     const notes = [];
 
-    if (reviewFlag && reviewFlag !== 'OK') notes.push(reviewFlag);
+    if (
+        reviewFlag &&
+        reviewFlag !== 'OK' &&
+        reviewFlag !== 'CHECK PACK SIZE'
+      ) {
+        notes.push(reviewFlag);
+      }
 
     const hasCases = (cases || '').toString().trim() !== '';
-      const hasUnitsWeight = (unitsWeight || '').toString().trim() !== '';
+    const hasUnitsWeight = (unitsWeight || '').toString().trim() !== '';
 
-      if (!hasCases && !hasUnitsWeight) {
-        missing.push('Quantity');
-      }
+    if (!hasCases && !hasUnitsWeight) {
+      missing.push('Quantity');
+    }
+
     if (!description) missing.push('Description');
     if (!packSize) missing.push('Pack Size');
     if (!unitPrice) missing.push('Unit Price');
 
-    if (missing.length) notes.push('Missing: ' + missing.join(', '));
+    /////////////////////////////////////
+    // PACK SIZE PARSE CHECK
+    /////////////////////////////////////
+
+    if (packSize) {
+      const parsedPack = parsePackSizeToUnits_(packSize);
+
+      if (parsedPack.reviewFlag !== 'OK') {
+        notes.push('CHECK PACK SIZE: ' + parsedPack.notes);
+      }
+
+      if (!parsedPack.unitPerCase) {
+        notes.push('Missing Unit Per Pack/Case from pack size');
+      }
+    }
+
+    if (missing.length) {
+      notes.push('Missing: ' + missing.join(', '));
+    }
 
     if (!notes.length) return;
 
@@ -125,17 +153,17 @@ function buildPdfReviewFromExtractedLines(fileId) {
       'Original Units / Weight': unitsWeight,
       'Original Description': description,
       'Original Pack Size': packSize,
-      'Original Item Code': getValueByHeader_(row, sourceHeaders, 'Item Code'),
+      'Original Item Code': itemCode,
       'Original Unit Price': unitPrice,
-      'Original Line Total': getValueByHeader_(row, sourceHeaders, 'Line Total'),
+      'Original Line Total': lineTotal,
 
       'Corrected Cases': cases,
       'Corrected Units / Weight': unitsWeight,
       'Corrected Description': description,
       'Corrected Pack Size': packSize,
-      'Corrected Item Code': getValueByHeader_(row, sourceHeaders, 'Item Code'),
+      'Corrected Item Code': itemCode,
       'Corrected Unit Price': unitPrice,
-      'Corrected Line Total': getValueByHeader_(row, sourceHeaders, 'Line Total'),
+      'Corrected Line Total': lineTotal,
 
       'Review Status': 'Pending',
       'Notes': notes.join(' | ')
