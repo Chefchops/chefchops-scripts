@@ -1,0 +1,9 @@
+# Ignore accidental JS duplicates from clasp
+*.js
+
+# Node stuff (if any appears)
+node_modules/
+
+# OS junk
+.DS_Store
+Thumbs.db

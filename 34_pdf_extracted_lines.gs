@@ -10,41 +10,57 @@ function buildExtractedLinesFromPdfJson_(fileId) {
   const json = rebuildJsonFromChunks_(fileId);
   const meta = getPdfJsonMetaByFileId_(fileId);
 
-  const rows = json.bidfoodRows || [];
+  const supplier = (json.supplier || meta.supplier || '').toString().trim().toLowerCase();
+
+  let rows = [];
+  let sourceType = '';
+
+  if (supplier === 'bidfood') {
+    rows = json.bidfoodRows || [];
+    sourceType = 'bidfoodRows';
+  } else if (supplier === 'pilgrim') {
+    rows = json.pilgrimRows || [];
+    sourceType = 'pilgrimRows';
+  } else {
+    SpreadsheetApp.getUi().alert('Unsupported supplier in JSON: ' + supplier);
+    return 0;
+  }
 
   if (!rows.length) {
-    SpreadsheetApp.getUi().alert('No bidfoodRows found in JSON.');
+    SpreadsheetApp.getUi().alert(
+      'No invoice rows found in JSON for supplier: ' + (json.supplier || meta.supplier || '')
+    );
     return 0;
   }
 
   const sheet = getOrCreatePdfExtractedLinesSheet_();
   clearExtractedLinesForFile_(sheet, fileId);
 
-  const output = rows.map((row, index) => {
-    return [
-      meta && meta.uploadTime ? meta.uploadTime : new Date(),
-      json.fileName || (meta && meta.fileName) || '',
-      json.supplier || (meta && meta.supplier) || '',
-      json.site || (meta && meta.site) || '',
-      fileId,
-      index + 1,
-      index + 1,
-      'bidfoodRows',
-      '',
-      '',
-      row.cases || '',
-      row.units_weight || '',
-      row.base_unit || '',
-      row.description || '',
-      row.pack_size || '',
-      row.item_code || '',
-      row.unit_price || '',
-      row.line_total || '',
-      row.vat || '',
-      row.vat_total || '',
-      row.reviewFlag || ''
-    ];
-  });
+const output = rows.map((row, index) => {
+  return [
+    meta && meta.uploadTime ? meta.uploadTime : new Date(),
+    json.fileName || (meta && meta.fileName) || '',
+    json.supplier || (meta && meta.supplier) || '',
+    json.site || (meta && meta.site) || '',
+    fileId,
+    index + 1,
+    index + 1,
+    sourceType,
+    '',
+    '',
+    row.cases || '',
+    row.units_weight || '',
+    row.base_unit || '',
+    row.description || '',
+    row.pack_size || '',
+    row.item_code || '',
+    row.unit_price || '',
+    row.line_total || '',
+    row.vat || '',
+    row.vat_total || '',
+    row.reviewFlag || ''
+  ];
+});
 
   const startRow = Math.max(sheet.getLastRow() + 1, 2);
 

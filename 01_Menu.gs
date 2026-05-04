@@ -7,7 +7,8 @@ function onOpen() {
 }
 
 /////////////////////////////////////
-// CHEFCHOPS MENU (CLEAN + ORDERED)
+// CHEFCHOPS MENU
+// CLEAN CURRENT PIPELINE MENU
 /////////////////////////////////////
 
 function buildChefchopsMenu_() {
@@ -16,7 +17,7 @@ function buildChefchopsMenu_() {
   ui.createMenu('Chefchops')
 
     /////////////////////////////////////
-    // PDF PIPELINE (NEW)
+    // PDF PIPELINE
     /////////////////////////////////////
     .addSubMenu(
       ui.createMenu('PDF Pipeline')
@@ -34,7 +35,7 @@ function buildChefchopsMenu_() {
     )
 
     /////////////////////////////////////
-    // PDF HEADERS (NEW - IMPORTANT)
+    // PDF HEADERS
     /////////////////////////////////////
     .addSubMenu(
       ui.createMenu('PDF Headers')
@@ -59,7 +60,7 @@ function buildChefchopsMenu_() {
     )
 
     /////////////////////////////////////
-    // INGREDIENTS
+    // INGREDIENTS SUPPORT
     /////////////////////////////////////
     .addSubMenu(
       ui.createMenu('Ingredients')
@@ -75,7 +76,7 @@ function buildChefchopsMenu_() {
     )
 
     /////////////////////////////////////
-    // COMPARISON
+    // SUPPLIER COMPARISON
     /////////////////////////////////////
     .addSubMenu(
       ui.createMenu('Comparison')

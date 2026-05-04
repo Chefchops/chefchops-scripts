@@ -77,6 +77,7 @@ function buildLatestPdfInvoiceHeader() {
   const parsedJson = typeof json === 'string'
     ? JSON.parse(json)
     : json;
+    Logger.log(JSON.stringify(parsedJson));
 
   const invoiceHeader = parsedJson.invoiceHeader || {};
 
@@ -88,7 +89,7 @@ function buildLatestPdfInvoiceHeader() {
     site: parsedJson.site || '',
     siteName: invoiceHeader.siteName || '',
     driveFileId: fileId,
-
+    fileName: parsedJson.fileName || '',
     invoiceNumber: invoiceHeader.invoiceNumber || '',
     accountNumber: invoiceHeader.accountNumber || '',
     orderNumber: invoiceHeader.orderNumber || '',
