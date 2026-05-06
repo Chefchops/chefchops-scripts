@@ -352,3 +352,171 @@ function formatPdfInvoiceHeadersSheet_() {
 
   sheet.autoResizeColumns(1, sheet.getLastColumn());
 }
+
+/////////////////////////////////////
+// BUILD PDF INVOICE HEADER FROM LATEST JSON
+// SAFE ENTRY FOR PIPELINE FLOW
+/////////////////////////////////////
+
+function buildPdfInvoiceHeaderFromLatestJson_(fileId) {
+  if (!fileId) throw new Error('Missing fileId for invoice header build.');
+
+  const ss = SpreadsheetApp.getActive();
+
+  const headerSheet = ss.getSheetByName('PDF Invoice Headers');
+  if (!headerSheet) {
+    throw new Error('Sheet "PDF Invoice Headers" not found.');
+  }
+
+  const headerHeaders = getHeaderMap_(headerSheet, 1);
+
+  const parsedJson = getPdfJsonObjectForHeaderBuild_(fileId);
+  const meta = getPdfJsonMetaForHeaderBuild_(fileId);
+
+  const invoiceHeader =
+    parsedJson.invoiceHeader ||
+    parsedJson.invoice_header ||
+    {};
+
+  upsertPdfInvoiceHeaderRow_(headerSheet, headerHeaders, {
+    uploadTime: new Date(),
+
+    fileName:
+      parsedJson.fileName ||
+      parsedJson.file_name ||
+      meta.fileName ||
+      '',
+
+    supplier:
+      parsedJson.supplier ||
+      meta.supplier ||
+      '',
+
+    site:
+      parsedJson.site ||
+      meta.site ||
+      '',
+
+    siteName:
+      invoiceHeader.siteName ||
+      invoiceHeader.site_name ||
+      '',
+
+    driveFileId: fileId,
+
+    invoiceNumber:
+      invoiceHeader.invoiceNumber ||
+      invoiceHeader.invoice_number ||
+      invoiceHeader.invoiceNo ||
+      invoiceHeader.invoice_no ||
+      '',
+
+    accountNumber:
+      invoiceHeader.accountNumber ||
+      invoiceHeader.account_number ||
+      '',
+
+    orderNumber:
+      invoiceHeader.orderNumber ||
+      invoiceHeader.order_number ||
+      '',
+
+    deliveryDate:
+      invoiceHeader.deliveryDate ||
+      invoiceHeader.delivery_date ||
+      '',
+
+    netTotal:
+      invoiceHeader.netTotal ||
+      invoiceHeader.net_total ||
+      '',
+
+    vatTotal:
+      invoiceHeader.vatTotal ||
+      invoiceHeader.vat_total ||
+      '',
+
+    grossTotal:
+      invoiceHeader.grossTotal ||
+      invoiceHeader.gross_total ||
+      '',
+
+    source:
+      invoiceHeader.source ||
+      'Cloud Run invoiceHeader',
+
+    notes:
+      invoiceHeader.notes ||
+      'Built from staged PDF JSON'
+  });
+}
+
+/////////////////////////////////////
+// GET PDF JSON OBJECT FOR HEADER BUILD
+/////////////////////////////////////
+
+function getPdfJsonObjectForHeaderBuild_(fileId) {
+  if (!fileId) throw new Error('Missing fileId.');
+
+  const json = rebuildJsonFromChunks_(fileId);
+
+  if (!json) {
+    throw new Error('No staged JSON found for Drive File ID: ' + fileId);
+  }
+
+  if (typeof json === 'object') {
+    return json;
+  }
+
+  return JSON.parse(json);
+}
+
+
+/////////////////////////////////////
+// GET PDF JSON META FOR HEADER BUILD
+// HEADER-BASED FALLBACK
+/////////////////////////////////////
+
+function getPdfJsonMetaForHeaderBuild_(fileId) {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName('PDF JSON Staging');
+
+  if (!sheet) {
+    throw new Error('Sheet "PDF JSON Staging" not found.');
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return {};
+  }
+
+  const headers = getHeaderMap_(sheet, 1);
+
+  const driveFileIdCol = getRequiredHeader_(headers, 'Drive File ID');
+
+  const fileNameCol = getOptionalHeader_(headers, 'File Name');
+  const supplierCol = getOptionalHeader_(headers, 'Supplier');
+  const siteCol = getOptionalHeader_(headers, 'Site');
+
+  const data = sheet
+    .getRange(2, 1, lastRow - 1, sheet.getLastColumn())
+    .getValues();
+
+  for (let i = data.length - 1; i >= 0; i--) {
+    const row = data[i];
+
+    const rowFileId = row[driveFileIdCol - 1]
+      ? row[driveFileIdCol - 1].toString().trim()
+      : '';
+
+    if (rowFileId !== fileId) continue;
+
+    return {
+      fileName: fileNameCol ? row[fileNameCol - 1] : '',
+      supplier: supplierCol ? row[supplierCol - 1] : '',
+      site: siteCol ? row[siteCol - 1] : ''
+    };
+  }
+
+  return {};
+}

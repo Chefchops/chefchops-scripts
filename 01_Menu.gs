@@ -6,9 +6,10 @@ function onOpen() {
   buildChefchopsMenu_();
 }
 
+
 /////////////////////////////////////
 // CHEFCHOPS MENU
-// CLEAN CURRENT PIPELINE MENU
+// CLEAN CURRENT LIVE PIPELINE ONLY
 /////////////////////////////////////
 
 function buildChefchopsMenu_() {
@@ -19,6 +20,7 @@ function buildChefchopsMenu_() {
     /////////////////////////////////////
     // PDF PIPELINE
     /////////////////////////////////////
+
     .addSubMenu(
       ui.createMenu('PDF Pipeline')
 
@@ -27,7 +29,7 @@ function buildChefchopsMenu_() {
 
         .addSeparator()
 
-        .addItem('3. Build Extracted Lines + Review', 'runBuildExtractedLinesFromPdfJson')
+        .addItem('3. Build Header + Extracted Lines + Review', 'runBuildExtractedLinesFromPdfJson')
 
         .addSeparator()
 
@@ -35,18 +37,9 @@ function buildChefchopsMenu_() {
     )
 
     /////////////////////////////////////
-    // PDF HEADERS
-    /////////////////////////////////////
-    .addSubMenu(
-      ui.createMenu('PDF Headers')
-
-        .addItem('Setup Headers Sheet', 'setupPdfInvoiceHeadersSheet')
-        .addItem('Build Latest Invoice Header', 'buildLatestPdfInvoiceHeader')
-    )
-
-    /////////////////////////////////////
     // PDF REVIEW
     /////////////////////////////////////
+
     .addSubMenu(
       ui.createMenu('PDF Review')
 
@@ -58,30 +51,15 @@ function buildChefchopsMenu_() {
 
         .addItem('Clear Review Sheet', 'clearPdfReviewSheet')
     )
+/////////////////////////////////////
+// PRICE TOOLS
+/////////////////////////////////////
 
-    /////////////////////////////////////
-    // INGREDIENTS SUPPORT
-    /////////////////////////////////////
     .addSubMenu(
-      ui.createMenu('Ingredients')
-
-        .addItem('Check Missing Categories', 'checkMissingCategories')
-        .addItem('Check Missing Product Groups', 'checkMissingProductGroups')
-        .addItem('Auto Suggest Product Groups', 'autoSuggestIngredientProductGroups')
-
-        .addSeparator()
-
-        .addItem('Set Category Dropdown', 'setIngredientCategoryDropdown')
-        .addItem('Set Product Group Dropdown', 'setIngredientProductGroupDropdown')
+      ui.createMenu('Price Tools')
+        .addItem('Setup Price Search', 'setupPriceSearchSheet')
+        .addItem('Run Price Search', 'runPriceSearch')
+        .addItem('Clear Price Search', 'clearPriceSearchResults')
     )
-
-    /////////////////////////////////////
-    // SUPPLIER COMPARISON
-    /////////////////////////////////////
-    .addSubMenu(
-      ui.createMenu('Comparison')
-        .addItem('Build Supplier Comparison', 'buildSupplierComparison')
-    )
-
     .addToUi();
 }

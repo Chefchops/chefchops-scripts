@@ -6,32 +6,31 @@
 // - unitPerCase   = total base units in the priced case
 //
 // Examples:
-// 12-500ml  -> packQty 12, baseUnit ml, unitPerCase 6000
-// 6x1ltr    -> packQty 6,  baseUnit ml, unitPerCase 6000
-// 1ltr      -> packQty 1,  baseUnit ml, unitPerCase 1000
-// 200-99    -> OCR fixed to 200x9g
+// 12-500ml    -> packQty 12,  baseUnit ml,   unitPerCase 6000
+// 6x1ltr      -> packQty 6,   baseUnit ml,   unitPerCase 6000
+// 1ltr        -> packQty 1,   baseUnit ml,   unitPerCase 1000
+// 200-99      -> OCR fixed to 200x9g
+// 12x15Eggs   -> packQty 180, baseUnit unit, unitPerCase 180
 /////////////////////////////////////
 
 function parsePackSizeToUnits_(packSize) {
   const rawOriginal = (packSize || '').toString().trim();
 
-    const raw = rawOriginal
+  const raw = rawOriginal
     .toLowerCase()
     .replace(/\s+/g, '')
     .replace(/×/g, 'x')
     .replace(/–/g, '-')
     .replace(/—/g, '-')
-
-    // OCR fix: Pilgrim sometimes reads 1ltr as 11tr, 2ltr as 21tr, etc.
-    // Must run before normal ltr -> l conversion.
+    .replace(/^iltr$/g, '1ltr')
+    .replace(/^lltr$/g, '1ltr')
     .replace(/^(\d+)1tr$/g, '$1ltr')
-
+    .replace(/litres/g, 'l')
+    .replace(/litre/g, 'l')
+    .replace(/liters/g, 'l')
+    .replace(/liter/g, 'l')
     .replace(/ltr/g, 'l')
     .replace(/lt/g, 'l')
-    .replace(/litre/g, 'l')
-    .replace(/litres/g, 'l')
-    .replace(/liter/g, 'l')
-    .replace(/liters/g, 'l')
     .trim();
 
   const result = {
@@ -64,6 +63,35 @@ function parsePackSizeToUnits_(packSize) {
     result.notes = 'OCR corrected 200-99 to 200x9g';
     return result;
   }
+
+  /////////////////////////////////////
+// NORMALISE PILGRIM PACK SIZE DISPLAY
+/////////////////////////////////////
+
+function normalisePilgrimPackSizeDisplay_(supplier, caseSize, packSize) {
+  const supplierText = (supplier || '').toString().toLowerCase().trim();
+  const caseText = (caseSize || '').toString().trim();
+  const packText = (packSize || '').toString().trim();
+
+  if (supplierText !== 'pilgrim') return packText;
+  if (!caseText || !packText) return packText;
+
+  const caseQty = Number(caseText);
+
+  if (!caseQty || caseQty <= 0) return packText;
+
+  const eggMatch = packText.match(/^(\d+(?:\.\d+)?)\s*eggs?$/i);
+
+  if (eggMatch) {
+    const eggsPerPack = Number(eggMatch[1]);
+
+    if (eggsPerPack > 0) {
+      return caseQty + 'x' + eggsPerPack + 'Eggs';
+    }
+  }
+
+  return packText;
+}
 
   /////////////////////////////////////
   // HELPER: NORMALISE UNIT + TOTAL
@@ -167,20 +195,65 @@ function parsePackSizeToUnits_(packSize) {
   }
 
   /////////////////////////////////////
-  // 1-120pk / 1-500ea / 6-100ptn
-  // Dash count packs
+  // PILGRIM EGGS / DOZEN STYLE
+  // Examples:
+  // 12x15Eggs
+  // 12 x 15 Eggs
+  // Means 12 packs of 15 eggs = 180 units
   /////////////////////////////////////
 
-  match = raw.match(/^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)(pk|ea|each|unit|units|ptn|portion|portions|sti|stick|sticks|roll|rolls|can|cans|btl|btls|sac|sachet|sachets|box|boxes)$/);
+  match = raw.match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)(egg|eggs)$/);
 
   if (match) {
     const outer = Number(match[1]);
     const inner = Number(match[2]);
+    const totalUnits = outer * inner;
 
     return setOk_(
-      outer * inner,
+      totalUnits,
       'unit',
-      outer * inner
+      totalUnits
+    );
+  }
+
+  /////////////////////////////////////
+  // PILGRIM GENERIC COUNT STYLE
+  // Examples:
+  // 12x15Each
+  // 6x10Portions
+  // 24x1Units
+  /////////////////////////////////////
+
+  match = raw.match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)(each|ea|unit|units|ptn|ptns|portion|portions|pcs|piece|pieces)$/);
+
+  if (match) {
+    const outer = Number(match[1]);
+    const inner = Number(match[2]);
+    const totalUnits = outer * inner;
+
+    return setOk_(
+      totalUnits,
+      'unit',
+      totalUnits
+    );
+  }
+
+  /////////////////////////////////////
+  // 1-120pk / 1-500ea / 6-100ptn
+  // Dash count packs
+  /////////////////////////////////////
+
+  match = raw.match(/^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)(pk|ea|each|unit|units|ptn|ptns|portion|portions|sti|stick|sticks|roll|rolls|can|cans|btl|btls|sac|sachet|sachets|box|boxes)$/);
+
+  if (match) {
+    const outer = Number(match[1]);
+    const inner = Number(match[2]);
+    const totalUnits = outer * inner;
+
+    return setOk_(
+      totalUnits,
+      'unit',
+      totalUnits
     );
   }
 
@@ -189,16 +262,17 @@ function parsePackSizeToUnits_(packSize) {
   // Count x count packs
   /////////////////////////////////////
 
-  match = raw.match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)(pk|ea|each|unit|units|ptn|portion|portions|sti|stick|sticks|roll|rolls|can|cans|btl|btls|sac|sachet|sachets|box|boxes)$/);
+  match = raw.match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)(pk|ea|each|unit|units|ptn|ptns|portion|portions|sti|stick|sticks|roll|rolls|can|cans|btl|btls|sac|sachet|sachets|box|boxes)$/);
 
   if (match) {
     const outer = Number(match[1]);
     const inner = Number(match[2]);
+    const totalUnits = outer * inner;
 
     return setOk_(
-      outer * inner,
+      totalUnits,
       'unit',
-      outer * inner
+      totalUnits
     );
   }
 
@@ -247,7 +321,7 @@ function parsePackSizeToUnits_(packSize) {
   // Simple count packs
   /////////////////////////////////////
 
-  match = raw.match(/^(\d+(?:\.\d+)?)(pk|ea|each|unit|units|ptn|portion|portions|sti|stick|sticks|roll|rolls|can|cans|btl|btls|sac|sachet|sachets|box|boxes|s)?$/);
+  match = raw.match(/^(\d+(?:\.\d+)?)(pk|ea|each|unit|units|ptn|ptns|portion|portions|sti|stick|sticks|roll|rolls|can|cans|btl|btls|sac|sachet|sachets|box|boxes|s)?$/);
 
   if (match) {
     const qty = Number(match[1]);

@@ -2,7 +2,7 @@
 // PDF REVIEW SYSTEM
 // ACTIVE CURRENT PIPELINE
 //
-// Current flow:
+// Current live flow:
 // PDF Extracted Lines
 // -> PDF Review
 // -> Apply Review Corrections
@@ -15,6 +15,7 @@
 /////////////////////////////////////
 
 const PDF_REVIEW_SHEET_NAME_ = 'PDF Review';
+
 
 /////////////////////////////////////
 // PDF REVIEW HEADERS
@@ -51,6 +52,7 @@ function getPdfReviewHeaders_() {
   ];
 }
 
+
 /////////////////////////////////////
 // SETUP PDF REVIEW SHEET
 /////////////////////////////////////
@@ -72,7 +74,8 @@ function setupPdfReviewSheet() {
 
   sheet.setFrozenRows(1);
 
-  sheet.getRange(1, 1, 1, headers.length)
+  sheet
+    .getRange(1, 1, 1, headers.length)
     .setFontWeight('bold')
     .setBackground('#d9ead3');
 
@@ -92,8 +95,13 @@ function setupPdfReviewSheet() {
     .setDataValidation(rule);
 
   // Keep item codes as text so trailing zeroes are preserved.
-  sheet.getRange(2, originalItemCodeCol, Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat('@');
-  sheet.getRange(2, correctedItemCodeCol, Math.max(sheet.getMaxRows() - 1, 1), 1).setNumberFormat('@');
+  sheet
+    .getRange(2, originalItemCodeCol, Math.max(sheet.getMaxRows() - 1, 1), 1)
+    .setNumberFormat('@');
+
+  sheet
+    .getRange(2, correctedItemCodeCol, Math.max(sheet.getMaxRows() - 1, 1), 1)
+    .setNumberFormat('@');
 
   applyPdfReviewConditionalFormatting_(sheet);
 
@@ -102,18 +110,22 @@ function setupPdfReviewSheet() {
   ui.alert('PDF Review sheet setup complete.');
 }
 
+
 /////////////////////////////////////
 // BUILD PDF REVIEW FROM EXTRACTED LINES
 /////////////////////////////////////
 
-function buildPdfReviewFromExtractedLines(fileId) {
+function buildPdfReviewFromExtractedLines(fileId, options) {
+  options = options || {};
+  const silent = options.silent === true;
+
   const ss = SpreadsheetApp.getActive();
   const ui = SpreadsheetApp.getUi();
 
   if (!fileId) throw new Error('Missing fileId.');
 
   const sourceSheet = ss.getSheetByName('PDF Extracted Lines');
-  const reviewSheet = ss.getSheetByName('PDF Review');
+  const reviewSheet = ss.getSheetByName(PDF_REVIEW_SHEET_NAME_);
 
   if (!sourceSheet) throw new Error('Sheet "PDF Extracted Lines" not found.');
   if (!reviewSheet) throw new Error('Sheet "PDF Review" not found.');
@@ -152,8 +164,14 @@ function buildPdfReviewFromExtractedLines(fileId) {
   const lastRow = sourceSheet.getLastRow();
 
   if (lastRow < 2) {
-    ui.alert('No extracted lines found.');
-    return 0;
+    if (!silent) {
+      ui.alert('No extracted lines found.');
+    }
+
+    return {
+      reviewCount: 0,
+      popupLines: []
+    };
   }
 
   const values = sourceSheet
@@ -223,6 +241,8 @@ function buildPdfReviewFromExtractedLines(fileId) {
 
     if (!notes.length) return;
 
+    const cleanedNotes = cleanPdfReviewNotes_(notes.join(' | '));
+
     const reviewRow = new Array(reviewSheet.getLastColumn()).fill('');
 
     setRowByHeaders_(reviewRow, reviewHeaders, {
@@ -249,20 +269,28 @@ function buildPdfReviewFromExtractedLines(fileId) {
       'Corrected Line Total': lineTotal,
 
       'Review Status': 'Pending',
-      'Notes': cleanPdfReviewNotes_(notes.join(' | '))
+      'Notes': cleanedNotes
     });
 
     output.push(reviewRow);
 
     popupLines.push(
       'Row ' + rowNo + ': ' + (description || '[No description]') + '\n' +
-      cleanPdfReviewNotes_(notes.join(' | '))
+      cleanedNotes
     );
   });
 
   if (!output.length) {
-    ui.alert('PDF Review built.\n\nNo review rows needed for this PDF.');
-    return 0;
+    applyPdfReviewConditionalFormatting_(reviewSheet);
+
+    if (!silent) {
+      ui.alert('PDF Review built.\n\nNo review rows needed for this PDF.');
+    }
+
+    return {
+      reviewCount: 0,
+      popupLines: []
+    };
   }
 
   const startRow = Math.max(reviewSheet.getLastRow() + 1, 2);
@@ -285,20 +313,31 @@ function buildPdfReviewFromExtractedLines(fileId) {
     .setDataValidation(rule);
 
   // Preserve item codes as text.
-  reviewSheet.getRange(startRow, originalItemCodeCol, output.length, 1).setNumberFormat('@');
-  reviewSheet.getRange(startRow, correctedItemCodeCol, output.length, 1).setNumberFormat('@');
+  reviewSheet
+    .getRange(startRow, originalItemCodeCol, output.length, 1)
+    .setNumberFormat('@');
+
+  reviewSheet
+    .getRange(startRow, correctedItemCodeCol, output.length, 1)
+    .setNumberFormat('@');
 
   applyPdfReviewConditionalFormatting_(reviewSheet);
 
-  ui.alert(
-    'PDF Review built from Extracted Lines.\n\n' +
-    'Rows needing review: ' + output.length + '\n\n' +
-    popupLines.slice(0, 15).join('\n\n') +
-    (popupLines.length > 15 ? '\n\nMore rows exist in PDF Review.' : '')
-  );
+  if (!silent) {
+    ui.alert(
+      'PDF Review built from Extracted Lines.\n\n' +
+      'Rows needing review: ' + output.length + '\n\n' +
+      popupLines.slice(0, 15).join('\n\n') +
+      (popupLines.length > 15 ? '\n\nMore rows exist in PDF Review.' : '')
+    );
+  }
 
-  return output.length;
+  return {
+    reviewCount: output.length,
+    popupLines: popupLines
+  };
 }
+
 
 /////////////////////////////////////
 // CLEAR PDF REVIEW ROWS FOR FILE
@@ -328,6 +367,7 @@ function clearPdfReviewRowsForFile_(sheet, headerMap, fileId) {
   pdfReviewDeleteRowsInGroups_(sheet, rowsToDelete);
 }
 
+
 /////////////////////////////////////
 // RUN BUILD PDF REVIEW FROM EXTRACTED LINES
 /////////////////////////////////////
@@ -340,6 +380,7 @@ function runBuildPdfReviewFromExtractedLines() {
   buildPdfReviewFromExtractedLines(fileId);
 }
 
+
 /////////////////////////////////////
 // APPLY PDF REVIEW CORRECTIONS
 // PDF Review -> PDF Extracted Lines
@@ -349,7 +390,7 @@ function applyPdfReviewCorrections() {
   const ss = SpreadsheetApp.getActive();
   const ui = SpreadsheetApp.getUi();
 
-  const reviewSheet = ss.getSheetByName('PDF Review');
+  const reviewSheet = ss.getSheetByName(PDF_REVIEW_SHEET_NAME_);
   const extractedSheet = ss.getSheetByName('PDF Extracted Lines');
 
   if (!reviewSheet) throw new Error('Missing sheet: PDF Review');
@@ -474,6 +515,7 @@ function applyPdfReviewCorrections() {
   );
 }
 
+
 /////////////////////////////////////
 // CLEAR PDF REVIEW SHEET
 /////////////////////////////////////
@@ -504,6 +546,7 @@ function clearPdfReviewSheet() {
   ui.alert('PDF Review cleared.');
 }
 
+
 /////////////////////////////////////
 // HIGHLIGHT PDF REVIEW MISSING FIELDS
 /////////////////////////////////////
@@ -511,7 +554,7 @@ function clearPdfReviewSheet() {
 function highlightPdfReviewMissingFields() {
   const ss = SpreadsheetApp.getActive();
   const ui = SpreadsheetApp.getUi();
-  const sheet = ss.getSheetByName('PDF Review');
+  const sheet = ss.getSheetByName(PDF_REVIEW_SHEET_NAME_);
 
   if (!sheet) {
     ui.alert('Sheet "PDF Review" not found.');
@@ -529,6 +572,7 @@ function highlightPdfReviewMissingFields() {
 
   ui.alert('PDF Review missing-field highlighting applied.');
 }
+
 
 /////////////////////////////////////
 // APPLY PDF REVIEW CONDITIONAL FORMATTING
@@ -634,6 +678,7 @@ function applyPdfReviewConditionalFormatting_(sheet) {
   sheet.setConditionalFormatRules(rules);
 }
 
+
 /////////////////////////////////////
 // PDF REVIEW COLUMN LETTER HELPER
 /////////////////////////////////////
@@ -651,6 +696,7 @@ function pdfReviewColumnToLetter_(column) {
   return letter;
 }
 
+
 /////////////////////////////////////
 // CLEAN PDF REVIEW NOTES
 /////////////////////////////////////
@@ -666,6 +712,7 @@ function cleanPdfReviewNotes_(notes) {
     .trim();
 }
 
+
 /////////////////////////////////////
 // GET VALUE BY HEADER
 // LOCAL TO PDF REVIEW FILE
@@ -676,6 +723,7 @@ function pdfReviewGetValueByHeader_(row, headerMap, headerName) {
   if (!col) return '';
   return row[col - 1];
 }
+
 
 /////////////////////////////////////
 // DELETE ROWS IN GROUPS
