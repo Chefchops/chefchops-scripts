@@ -83,13 +83,14 @@ function buildLatestPdfInvoiceHeader() {
 
   const headerHeaders = getHeaderMap_(headerSheet, 1);
 
-  upsertPdfInvoiceHeaderRow_(headerSheet, headerHeaders, {
-    uploadTime: new Date(),
-    supplier: parsedJson.supplier || '',
-    site: parsedJson.site || '',
-    siteName: invoiceHeader.siteName || '',
-    driveFileId: fileId,
-    fileName: parsedJson.fileName || '',
+upsertPdfInvoiceHeaderRow_(headerSheet, headerHeaders, {
+  uploadTime: new Date(),
+  fileName: parsedJson.fileName || '',
+  supplier: parsedJson.supplier || '',
+  site: parsedJson.site || '',
+  siteName: invoiceHeader.siteName || '',
+  driveFileId: fileId,
+
     invoiceNumber: invoiceHeader.invoiceNumber || '',
     accountNumber: invoiceHeader.accountNumber || '',
     orderNumber: invoiceHeader.orderNumber || '',

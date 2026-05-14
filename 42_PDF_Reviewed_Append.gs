@@ -99,80 +99,86 @@ function appendReviewedPdfExtractedLinesToIngredientsMaster() {
       skipped++;
       return;
     }
+/////////////////////////////////////
+// PACK SIZE PARSING
+/////////////////////////////////////
 
-    /////////////////////////////////////
-    // PACK SIZE PARSING
-    /////////////////////////////////////
+const parsed = parsePackSizeToUnitsStandard_(packSize);
 
-    const parsed = parsePackSizeToUnits_(packSize);
+const standardPackSize = parsed.displayPackSize || packSize || '';
 
-    const baseUnitRaw = getValueByHeader_(row, extractedHeaders, 'Base Unit');
-    const baseUnit = parsed.baseUnit || baseUnitRaw || '';
+const baseUnitRaw = getValueByHeader_(row, extractedHeaders, 'Base Unit');
+const baseUnit = parsed.baseUnit || baseUnitRaw || '';
 
-    const packQty = parsed.packQty || '';
-    const unitPerCase = parsed.unitPerCase || '';
+const packQty = parsed.packQty || '';
+const unitPerCase = parsed.unitPerCase || '';
 
-    let costPerUnit = '';
+let costPerUnit = '';
 
-    if (packPrice && unitPerCase) {
-      costPerUnit = packPrice / Number(unitPerCase);
-    }
+if (packPrice && unitPerCase) {
+  costPerUnit = packPrice / Number(unitPerCase);
+}
 
-    const cleanName = cleanIngredientNameForPdfAppend_(description);
+const cleanName = cleanIngredientNameForPdfAppend_(description);
 
-    const codeKey = makePdfMasterCodeKey_(supplier, itemCode);
-    const fallbackKey = makePdfMasterFallbackKey_(supplier, cleanName, packSize, baseUnit);
+const codeKey = makePdfMasterCodeKey_(supplier, itemCode);
+const fallbackKey = makePdfMasterFallbackKey_(
+  supplier,
+  cleanName,
+  standardPackSize,
+  baseUnit
+);
 
-    const existingRow =
-      itemCode && masterLookup.byCode[codeKey]
-        ? masterLookup.byCode[codeKey]
-        : masterLookup.byFallback[fallbackKey];
+const existingRow =
+  itemCode && masterLookup.byCode[codeKey]
+    ? masterLookup.byCode[codeKey]
+    : masterLookup.byFallback[fallbackKey];
 
-    const data = {
-      supplier: supplier,
-      itemCode: itemCode,
-      description: description,
-      cleanName: cleanName,
-      packSize: packSize,
-      packQty: packQty,
-      packPrice: packPrice,
-      baseUnit: baseUnit,
-      costPerUnit: costPerUnit,
-      unitPerCase: unitPerCase,
-      cases: cases,
-      lineTotal: lineTotal,
-      packParseFlag: parsed.reviewFlag,
-      packParseNotes: parsed.notes
-    };
+const data = {
+  supplier: supplier,
+  itemCode: itemCode,
+  description: description,
+  cleanName: cleanName,
+  packSize: standardPackSize,
+  packQty: packQty,
+  packPrice: packPrice,
+  baseUnit: baseUnit,
+  costPerUnit: costPerUnit,
+  unitPerCase: unitPerCase,
+  cases: cases,
+  lineTotal: lineTotal,
+  packParseFlag: parsed.reviewFlag,
+  packParseNotes: parsed.notes
+};
 
-    if (existingRow) {
-      updateIngredientsMasterFromPdfRow_(
-        masterSheet,
-        masterHeaders,
-        existingRow,
-        data
-      );
-      updated++;
-    } else {
-      appendIngredientsMasterFromPdfRow_(
-        masterSheet,
-        masterHeaders,
-        data
-      );
-      appended++;
-    }
-  });
-
-  formatIngredientsMasterCostingColumns_();
-
-  ui.alert(
-    'Append complete\n\n' +
-    'Updated: ' + updated + '\n' +
-    'Appended: ' + appended + '\n' +
-    'Ignored: ' + ignored + '\n' +
-    'Skipped: ' + skipped + '\n\n' +
-    'Pack Price mapped from Unit Price.'
+if (existingRow) {
+  updateIngredientsMasterFromPdfRow_(
+    masterSheet,
+    masterHeaders,
+    existingRow,
+    data
   );
+  updated++;
+} else {
+  appendIngredientsMasterFromPdfRow_(
+    masterSheet,
+    masterHeaders,
+    data
+  );
+  appended++;
+}
+});
+
+formatIngredientsMasterCostingColumns_();
+
+ui.alert(
+  'Append complete\n\n' +
+  'Updated: ' + updated + '\n' +
+  'Appended: ' + appended + '\n' +
+  'Ignored: ' + ignored + '\n' +
+  'Skipped: ' + skipped + '\n\n' +
+  'Pack Price mapped from Unit Price.'
+);
 }
 
 
