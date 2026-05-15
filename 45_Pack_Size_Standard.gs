@@ -14,7 +14,7 @@ function parsePackSizeStandard_(input) {
     baseUnit: '',
     unitPerPackCase: '',
     reviewFlag: 'OK',
-    notes: ''
+    notes: '',
   };
 
   let raw = cleanPackSizeStandardText_(source.rawPackSize);
@@ -43,7 +43,8 @@ function parsePackSizeStandard_(input) {
 
   if (!parsed.ok) {
     result.reviewFlag = 'CHECK PACK SIZE';
-    result.notes = parsed.notes || 'Unrecognised pack size format: ' + result.rawPackSize;
+    result.notes =
+      parsed.notes || 'Unrecognised pack size format: ' + result.rawPackSize;
     return result;
   }
 
@@ -64,13 +65,13 @@ function normalisePackSizeInput_(input) {
   if (input && typeof input === 'object') {
     return {
       rawPackSize: input.packSize || input.pack_size || '',
-      rawCaseSize: input.caseSize || input.case_size || ''
+      rawCaseSize: input.caseSize || input.case_size || '',
     };
   }
 
   return {
     rawPackSize: input || '',
-    rawCaseSize: ''
+    rawCaseSize: '',
   };
 }
 
@@ -102,25 +103,46 @@ function cleanPackSizeStandardText_(value) {
 /////////////////////////////////////
 
 function applyPackSizeOcrFixes_(raw) {
+  let text = (raw || '').toString().toLowerCase().trim();
+
   const exactFixes = {
-  '1-51tr': '1-5ltr',
-  '2-51tr': '2-5ltr',
-  '2-2.271tr': '2-2.27ltr',
-  '1-6rol1': '1-6roll',
-  '12-50oml': '12-500ml',
-  '24-50oml': '24-500ml',
-  '1-2opk': '1-20pk',
-  '200-99': '200-9g',
-  '300-49': '300-4g',
-  '100-29': '100-2g'
-};
+    '1-51tr': '1-5ltr',
+    '2-51tr': '2-5ltr',
+    '2-2.271tr': '2-2.27ltr',
+    '1-6rol1': '1-6roll',
+    '12-50oml': '12-500ml',
+    '24-50oml': '24-500ml',
+    '1-2opk': '1-20pk',
+    '200-99': '200-9g',
+    '300-49': '300-4g',
+    '100-29': '100-2g',
 
-  if (exactFixes[raw]) return exactFixes[raw];
+    // Bidfood OCR / formatting fixes
+    '10-1.00pk': '10-100pk',
+    '1-1.80pk': '1-180pk',
+  };
 
-  return raw
-  .replace(/rol1/g, 'roll')
-  .replace(/(\d+)o(ml|g|kg|ltr|pk|ea|ptn)$/g, '$10$2')
-  .replace(/(\d+(?:\.\d+)?)1tr\b/g, '$1ltr');
+  if (exactFixes[text]) return exactFixes[text];
+
+  text = text.replace(/\s+/g, '');
+  text = text.replace(/[.,]+$/g, '');
+
+  text = text.replace(/rol1/g, 'roll');
+  text = text.replace(/m1\b/g, 'ml');
+  text = text.replace(/(\d+)o(ml|g|kg|ltr|pk|ea|ptn)$/g, '$10$2');
+
+  text = text.replace(/(\d+(?:\.\d+)?)1tr\b/g, '$1ltr');
+  text = text.replace(/^(\d+)1t\b/g, '$1ltr');
+  text = text.replace(/\b11t\b/g, '1ltr');
+
+  text = text.replace(/(\d+)\.\.(\d+)(kg|g|ml|ltr|l)\b/g, '$1.$2$3');
+
+  text = text.replace(/(\d+)x(\d+)p\b/g, '$1x$2g');
+  text = text.replace(/-(\d+)p\b/g, '-$1g');
+
+  text = text.replace(/(\d+)l\b/g, '$1ltr');
+
+  return text;
 }
 
 /////////////////////////////////////
@@ -130,7 +152,27 @@ function applyPackSizeOcrFixes_(raw) {
 function parseCleanPackSizeStandard_(raw) {
   let match;
 
+  /////////////////////////////////////
+  // dozen
+  /////////////////////////////////////
+
+  if (raw === 'dozen') {
+    return {
+      ok: true,
+      displayPackSize: 'dozen',
+      packQty: 12,
+      baseUnit: 'each',
+      unitPerPackCase: 12,
+      notes: '',
+    };
+  }
+
+  /////////////////////////////////////
+  // 15dozen
+  /////////////////////////////////////
+
   match = raw.match(/^(\d+(?:\.\d+)?)dozen$/);
+
   if (match) {
     const qty = Number(match[1]) * 12;
 
@@ -140,11 +182,16 @@ function parseCleanPackSizeStandard_(raw) {
       packQty: qty,
       baseUnit: 'each',
       unitPerPackCase: qty,
-      notes: ''
+      notes: '',
     };
   }
 
+  /////////////////////////////////////
+  // 2x15dozen
+  /////////////////////////////////////
+
   match = raw.match(/^(\d+)x(\d+(?:\.\d+)?)dozen$/);
+
   if (match) {
     const outer = Number(match[1]);
     const dozen = Number(match[2]);
@@ -156,11 +203,16 @@ function parseCleanPackSizeStandard_(raw) {
       packQty: outer,
       baseUnit: 'each',
       unitPerPackCase: qty,
-      notes: ''
+      notes: '',
     };
   }
 
+  /////////////////////////////////////
+  // 24x2x28.5g / 5-90x20g
+  /////////////////////////////////////
+
   match = raw.match(/^(\d+)[x-](\d+)x(\d+(?:\.\d+)?)(g|kg|ml|ltr|m)$/);
+
   if (match) {
     const outer = Number(match[1]);
     const inner = Number(match[2]);
@@ -169,15 +221,21 @@ function parseCleanPackSizeStandard_(raw) {
 
     return {
       ok: true,
-      displayPackSize: outer + 'x' + inner + 'x' + unitSize + displayUnit_(match[4]),
+      displayPackSize:
+        outer + 'x' + inner + 'x' + unitSize + displayUnit_(match[4]),
       packQty: outer,
       baseUnit: converted.baseUnit,
       unitPerPackCase: outer * converted.total,
-      notes: ''
+      notes: '',
     };
   }
 
+  /////////////////////////////////////
+  // 2-2.27ltr / 2-5l / 24x330ml / 6-2.62kg
+  /////////////////////////////////////
+
   match = raw.match(/^(\d+)[x-](\d+(?:\.\d+)?)(g|kg|ml|ltr|m)$/);
+
   if (match) {
     const packQty = Number(match[1]);
     const unitSize = Number(match[2]);
@@ -189,37 +247,66 @@ function parseCleanPackSizeStandard_(raw) {
       packQty: packQty,
       baseUnit: converted.baseUnit,
       unitPerPackCase: converted.total,
-      notes: ''
+      notes: '',
     };
   }
 
+  /////////////////////////////////////
+  // 25-170-200
+  // Portion weight range, e.g. 25 portions at 170-200g each
+  /////////////////////////////////////
 
-/////////////////////////////////////
-// 1-120pk / 1-500ea / 6-100ptn
-/////////////////////////////////////
+  match = raw.match(/^(\d+)[x-](\d+)-(\d+)$/);
 
-match = raw.match(/^(\d+)[x-](\d+)(pk|ea|each|unit|units|ptn|ptns|portion|portions|roll|rolls|sti|stick|sticks|can|cans|btl|btls|sac|sachet|sachets|box|boxes)$/);
+  if (match) {
+    const qty = Number(match[1]);
+    const minWeight = Number(match[2]);
+    const maxWeight = Number(match[3]);
 
-if (match) {
-  const outer = Number(match[1]);
-  const inner = Number(match[2]);
-  const qty = outer * inner;
-  const packWord = normaliseEachPackWord_(match[3]);
+    return {
+      ok: true,
+      displayPackSize: qty + 'x' + minWeight + '-' + maxWeight + 'g',
+      packQty: qty,
+      baseUnit: 'each',
+      unitPerPackCase: qty,
+      notes:
+        'Portion weight range retained: ' + minWeight + '-' + maxWeight + 'g',
+    };
+  }
 
-  return {
-    ok: true,
-    displayPackSize: outer === 1
-      ? inner + packWord
-      : outer + 'x' + inner + packWord,
-    packQty: qty,
-    baseUnit: 'each',
-    unitPerPackCase: qty,
-    notes: ''
-  };
-}
+  /////////////////////////////////////
+  // 1-120pk / 1-500ea / 6-100ptn / 1-6roll
+  /////////////////////////////////////
 
+  match = raw.match(
+    /^(\d+)[x-](\d+)(pk|ea|each|unit|units|ptn|ptns|portion|portions|roll|rolls|sti|stick|sticks|can|cans|btl|btls|sac|sachet|sachets|box|boxes)$/,
+  );
 
-  match = raw.match(/^(\d+)(pk|ea|each|unit|units|ptn|ptns|portion|portions|roll|rolls|sti|stick|sticks|can|cans|btl|btls|sac|sachet|sachets|box|boxes)$/);
+  if (match) {
+    const outer = Number(match[1]);
+    const inner = Number(match[2]);
+    const qty = outer * inner;
+    const packWord = normaliseEachPackWord_(match[3]);
+
+    return {
+      ok: true,
+      displayPackSize:
+        outer === 1 ? inner + packWord : outer + 'x' + inner + packWord,
+      packQty: qty,
+      baseUnit: 'each',
+      unitPerPackCase: qty,
+      notes: '',
+    };
+  }
+
+  /////////////////////////////////////
+  // 120pk / 500ea / 2000sac
+  /////////////////////////////////////
+
+  match = raw.match(
+    /^(\d+)(pk|ea|each|unit|units|ptn|ptns|portion|portions|roll|rolls|sti|stick|sticks|can|cans|btl|btls|sac|sachet|sachets|box|boxes)$/,
+  );
+
   if (match) {
     const qty = Number(match[1]);
 
@@ -229,11 +316,16 @@ if (match) {
       packQty: qty,
       baseUnit: 'each',
       unitPerPackCase: qty,
-      notes: ''
+      notes: '',
     };
   }
 
+  /////////////////////////////////////
+  // 48x9inch
+  /////////////////////////////////////
+
   match = raw.match(/^(\d+)x(\d+(?:\.\d+)?)(inch|in)$/);
+
   if (match) {
     const qty = Number(match[1]);
 
@@ -243,11 +335,16 @@ if (match) {
       packQty: qty,
       baseUnit: 'each',
       unitPerPackCase: qty,
-      notes: 'Size descriptor retained: ' + match[2] + 'inch'
+      notes: 'Size descriptor retained: ' + match[2] + 'inch',
     };
   }
 
+  /////////////////////////////////////
+  // 5kg / 1.8kg / 500ml / 5l
+  /////////////////////////////////////
+
   match = raw.match(/^(\d+(?:\.\d+)?)(g|kg|ml|ltr|m)$/);
+
   if (match) {
     const unitSize = Number(match[1]);
     const converted = convertPackUnitTotal_(unitSize, match[2]);
@@ -258,11 +355,16 @@ if (match) {
       packQty: 1,
       baseUnit: converted.baseUnit,
       unitPerPackCase: converted.total,
-      notes: ''
+      notes: '',
     };
   }
 
+  /////////////////////////////////////
+  // 2000
+  /////////////////////////////////////
+
   match = raw.match(/^(\d+)$/);
+
   if (match) {
     const qty = Number(match[1]);
 
@@ -272,13 +374,13 @@ if (match) {
       packQty: qty,
       baseUnit: 'each',
       unitPerPackCase: qty,
-      notes: ''
+      notes: '',
     };
   }
 
   return {
     ok: false,
-    notes: 'Unrecognised pack size format: ' + raw
+    notes: 'Unrecognised pack size format: ' + raw,
   };
 }
 
@@ -290,20 +392,20 @@ function convertPackUnitTotal_(total, unit) {
   if (unit === 'kg') {
     return {
       baseUnit: 'g',
-      total: total * 1000
+      total: total * 1000,
     };
   }
 
   if (unit === 'ltr') {
     return {
       baseUnit: 'ml',
-      total: total * 1000
+      total: total * 1000,
     };
   }
 
   return {
     baseUnit: unit,
-    total: total
+    total: total,
   };
 }
 
@@ -325,7 +427,8 @@ function normaliseEachPackWord_(word) {
 
   if (value === 'each') return 'ea';
   if (value === 'unit' || value === 'units') return 'ea';
-  if (value === 'ptns' || value === 'portion' || value === 'portions') return 'ptn';
+  if (value === 'ptns' || value === 'portion' || value === 'portions')
+    return 'ptn';
   if (value === 'rolls') return 'roll';
   if (value === 'sticks') return 'sti';
   if (value === 'stick') return 'sti';
@@ -337,11 +440,9 @@ function normaliseEachPackWord_(word) {
   return value;
 }
 
-
-
 /////////////////////////////////////
 // COMPATIBILITY WRAPPER
-// Matches old parsePackSizeToUnits_ output shape
+// MATCHES OLD parsePackSizeToUnits_ OUTPUT SHAPE
 /////////////////////////////////////
 
 function parsePackSizeToUnitsStandard_(packSize) {
@@ -355,28 +456,7 @@ function parsePackSizeToUnitsStandard_(packSize) {
     reviewFlag: parsed.reviewFlag,
     notes: parsed.notes,
     displayPackSize: parsed.displayPackSize,
-    cleanedPackSize: parsed.cleanedPackSize
-  };
-}
-
-
-/////////////////////////////////////
-// PILGRIM PACK SIZE STANDARD WRAPPER
-/////////////////////////////////////
-
-function buildPilgrimStandardPackSize_(caseSize, packSize) {
-  const parsed = parsePackSizeStandard_({
-    caseSize: caseSize,
-    packSize: packSize
-  });
-
-  return {
-    pack_size: parsed.displayPackSize,
-    packQty: parsed.packQty,
-    baseUnit: parsed.baseUnit,
-    unitPerPackCase: parsed.unitPerPackCase,
-    reviewFlag: parsed.reviewFlag,
-    notes: parsed.notes
+    cleanedPackSize: parsed.cleanedPackSize,
   };
 }
 
@@ -387,7 +467,7 @@ function buildPilgrimStandardPackSize_(caseSize, packSize) {
 function buildPilgrimStandardPackSize_(caseSize, packSize) {
   const parsed = parsePackSizeStandard_({
     caseSize: caseSize,
-    packSize: packSize
+    packSize: packSize,
   });
 
   return {
@@ -396,7 +476,7 @@ function buildPilgrimStandardPackSize_(caseSize, packSize) {
     baseUnit: parsed.baseUnit,
     unitPerPackCase: parsed.unitPerPackCase,
     reviewFlag: parsed.reviewFlag,
-    notes: parsed.notes
+    notes: parsed.notes,
   };
 }
 
@@ -413,6 +493,6 @@ function buildBidfoodStandardPackSize_(packSize) {
     baseUnit: parsed.baseUnit,
     unitPerPackCase: parsed.unitPerPackCase,
     reviewFlag: parsed.reviewFlag,
-    notes: parsed.notes
+    notes: parsed.notes,
   };
 }
