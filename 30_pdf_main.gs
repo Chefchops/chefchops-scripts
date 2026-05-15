@@ -3,25 +3,25 @@
 /////////////////////////////////////
 
 function processLastPdfRow_() {
-  const ss = SpreadsheetApp.getActive();
-  const sheet = ss.getSheetByName('PDF Staging');
-  const ui = SpreadsheetApp.getUi();
+	const ss = SpreadsheetApp.getActive();
+	const sheet = ss.getSheetByName("PDF Staging");
+	const ui = SpreadsheetApp.getUi();
 
-  if (!sheet) {
-    ui.alert('Sheet "PDF Staging" not found.');
-    return;
-  }
+	if (!sheet) {
+		ui.alert('Sheet "PDF Staging" not found.');
+		return;
+	}
 
-  const lastRow = sheet.getLastRow();
+	const lastRow = sheet.getLastRow();
 
-  if (lastRow < 2) {
-    ui.alert('No PDF rows found in PDF Staging.');
-    return;
-  }
+	if (lastRow < 2) {
+		ui.alert("No PDF rows found in PDF Staging.");
+		return;
+	}
 
-  processPdfRow(lastRow);
+	processPdfRow(lastRow);
 
-  ui.alert('Processed PDF Staging row ' + lastRow + '.');
+	ui.alert("Processed PDF Staging row " + lastRow + ".");
 }
 
 /////////////////////////////////////
@@ -29,32 +29,32 @@ function processLastPdfRow_() {
 /////////////////////////////////////
 
 function processNextPendingPdfRow() {
-  const ss = SpreadsheetApp.getActive();
-  const sheet = ss.getSheetByName('PDF Staging');
-  const ui = SpreadsheetApp.getUi();
+	const ss = SpreadsheetApp.getActive();
+	const sheet = ss.getSheetByName("PDF Staging");
+	const ui = SpreadsheetApp.getUi();
 
-  if (!sheet) {
-    ui.alert('Sheet "PDF Staging" not found.');
-    return;
-  }
+	if (!sheet) {
+		ui.alert('Sheet "PDF Staging" not found.');
+		return;
+	}
 
-  const target = getNextPendingPdfStagingRow_(sheet);
+	const target = getNextPendingPdfStagingRow_(sheet);
 
-  if (!target.rowNumber) {
-    ui.alert('No pending PDF rows found.');
-    return;
-  }
+	if (!target.rowNumber) {
+		ui.alert("No pending PDF rows found.");
+		return;
+	}
 
-  processPdfRow(target.rowNumber);
+	processPdfRow(target.rowNumber);
 
-  ui.alert(
-    'Processed next pending PDF.\n\n' +
-      'Row: ' +
-      target.rowNumber +
-      '\n' +
-      'File: ' +
-      target.fileName,
-  );
+	ui.alert(
+		"Processed next pending PDF.\n\n" +
+			"Row: " +
+			target.rowNumber +
+			"\n" +
+			"File: " +
+			target.fileName,
+	);
 }
 
 /////////////////////////////////////
@@ -62,107 +62,108 @@ function processNextPendingPdfRow() {
 /////////////////////////////////////
 
 function processNext5PendingPdfRows() {
-  processPendingPdfRows_(5);
+	processPendingPdfRows_(5);
 }
 
 /////////////////////////////////////
 // PROCESS PENDING PDF ROWS
+// ONE FINAL POPUP ONLY
 /////////////////////////////////////
 
 function processPendingPdfRows_(limit) {
-  const ss = SpreadsheetApp.getActive();
-  const sheet = ss.getSheetByName('PDF Staging');
-  const ui = SpreadsheetApp.getUi();
+	const ss = SpreadsheetApp.getActive();
+	const sheet = ss.getSheetByName("PDF Staging");
+	const ui = SpreadsheetApp.getUi();
 
-  if (!sheet) {
-    ui.alert('Sheet "PDF Staging" not found.');
-    return;
-  }
+	if (!sheet) {
+		ui.alert('Sheet "PDF Staging" not found.');
+		return;
+	}
 
-  const lastRow = sheet.getLastRow();
+	const lastRow = sheet.getLastRow();
 
-  if (lastRow < 2) {
-    ui.alert('No PDF rows found in PDF Staging.');
-    return;
-  }
+	if (lastRow < 2) {
+		ui.alert("No PDF rows found in PDF Staging.");
+		return;
+	}
 
-  const headers = getHeaderMap_(sheet, 1);
+	const headers = getHeaderMap_(sheet, 1);
 
-  const statusCol = getRequiredHeader_(headers, 'API Status', 'PDF Staging');
-  const jsonStatusCol = getRequiredHeader_(
-    headers,
-    'JSON Status',
-    'PDF Staging',
-  );
-  const fileNameCol = getRequiredHeader_(headers, 'File Name', 'PDF Staging');
-  const fileIdCol = getRequiredHeader_(headers, 'Drive File ID', 'PDF Staging');
+	const statusCol = getRequiredHeader_(headers, "API Status", "PDF Staging");
+	const jsonStatusCol = getRequiredHeader_(
+		headers,
+		"JSON Status",
+		"PDF Staging",
+	);
+	const fileNameCol = getRequiredHeader_(headers, "File Name", "PDF Staging");
+	const fileIdCol = getRequiredHeader_(headers, "Drive File ID", "PDF Staging");
 
-  const values = sheet
-    .getRange(2, 1, lastRow - 1, sheet.getLastColumn())
-    .getValues();
+	const values = sheet
+		.getRange(2, 1, lastRow - 1, sheet.getLastColumn())
+		.getValues();
 
-  let processed = 0;
-  let failed = 0;
-  const messages = [];
+	let processed = 0;
+	let failed = 0;
+	const messages = [];
 
-  for (let i = 0; i < values.length; i++) {
-    if (processed >= limit) break;
+	for (let i = 0; i < values.length; i++) {
+		if (processed >= limit) break;
 
-    const row = values[i];
-    const sheetRow = i + 2;
+		const row = values[i];
+		const sheetRow = i + 2;
 
-    const apiStatus = normalisePdfStatus_(row[statusCol - 1]);
-    const jsonStatus = normalisePdfStatus_(row[jsonStatusCol - 1]);
-    const fileName = row[fileNameCol - 1] || '';
-    const fileId = (row[fileIdCol - 1] || '').toString().trim();
+		const apiStatus = normalisePdfStatus_(row[statusCol - 1]);
+		const jsonStatus = normalisePdfStatus_(row[jsonStatusCol - 1]);
+		const fileName = row[fileNameCol - 1] || "";
+		const fileId = (row[fileIdCol - 1] || "").toString().trim();
 
-    if (!fileId) continue;
+		if (!fileId) continue;
 
-    if (apiStatus === 'DONE' && jsonStatus !== 'FAILED') continue;
+		if (apiStatus === "DONE" && jsonStatus !== "FAILED") continue;
 
-    if (
-      apiStatus &&
-      apiStatus !== 'PENDING' &&
-      apiStatus !== 'FAILED' &&
-      apiStatus !== 'ERROR' &&
-      apiStatus !== 'RETRY'
-    ) {
-      continue;
-    }
+		if (
+			apiStatus &&
+			apiStatus !== "PENDING" &&
+			apiStatus !== "FAILED" &&
+			apiStatus !== "ERROR" &&
+			apiStatus !== "RETRY"
+		) {
+			continue;
+		}
 
-    try {
-      sheet.getRange(sheetRow, statusCol).setValue('PROCESSING');
+		try {
+			sheet.getRange(sheetRow, statusCol).setValue("PROCESSING");
 
-      processPdfRow(sheetRow);
+			processPdfRow(sheetRow);
 
-      processed++;
-      messages.push('OK row ' + sheetRow + ': ' + fileName);
-    } catch (err) {
-      failed++;
+			processed++;
+			messages.push("OK row " + sheetRow + ": " + fileName);
+		} catch (err) {
+			failed++;
 
-      sheet.getRange(sheetRow, statusCol).setValue('ERROR');
-      sheet.getRange(sheetRow, jsonStatusCol).setValue('FAILED');
+			sheet.getRange(sheetRow, statusCol).setValue("ERROR");
+			sheet.getRange(sheetRow, jsonStatusCol).setValue("FAILED");
 
-      messages.push(
-        'FAILED row ' + sheetRow + ': ' + fileName + ' | ' + err.message,
-      );
-    }
-  }
+			messages.push(
+				"FAILED row " + sheetRow + ": " + fileName + " | " + err.message,
+			);
+		}
+	}
 
-  ui.alert(
-    'PDF batch processing complete.\n\n' +
-      'Limit: ' +
-      limit +
-      '\n' +
-      'Processed: ' +
-      processed +
-      '\n' +
-      'Failed: ' +
-      failed +
-      '\n\n' +
-      messages.slice(0, 15).join('\n') +
-      (messages.length > 15 ? '\n\nMore results not shown.' : ''),
-  );
+	ui.alert(
+		"PDF batch processing complete.\n\n" +
+			"Limit: " +
+			limit +
+			"\n" +
+			"Processed: " +
+			processed +
+			"\n" +
+			"Failed: " +
+			failed +
+			"\n\n" +
+			messages.slice(0, 15).join("\n") +
+			(messages.length > 15 ? "\n\nMore results not shown." : ""),
+	);
 }
 
 /////////////////////////////////////
@@ -170,144 +171,167 @@ function processPendingPdfRows_(limit) {
 /////////////////////////////////////
 
 function getNextPendingPdfStagingRow_(sheet) {
-  const lastRow = sheet.getLastRow();
+	const lastRow = sheet.getLastRow();
 
-  if (lastRow < 2) {
-    return {
-      rowNumber: 0,
-      fileName: '',
-    };
-  }
+	if (lastRow < 2) {
+		return {
+			rowNumber: 0,
+			fileName: "",
+		};
+	}
 
-  const headers = getHeaderMap_(sheet, 1);
+	const headers = getHeaderMap_(sheet, 1);
 
-  const statusCol = getRequiredHeader_(headers, 'API Status', 'PDF Staging');
-  const fileNameCol = getRequiredHeader_(headers, 'File Name', 'PDF Staging');
-  const fileIdCol = getRequiredHeader_(headers, 'Drive File ID', 'PDF Staging');
+	const statusCol = getRequiredHeader_(headers, "API Status", "PDF Staging");
+	const fileNameCol = getRequiredHeader_(headers, "File Name", "PDF Staging");
+	const fileIdCol = getRequiredHeader_(headers, "Drive File ID", "PDF Staging");
 
-  const values = sheet
-    .getRange(2, 1, lastRow - 1, sheet.getLastColumn())
-    .getValues();
+	const values = sheet
+		.getRange(2, 1, lastRow - 1, sheet.getLastColumn())
+		.getValues();
 
-  for (let i = 0; i < values.length; i++) {
-    const row = values[i];
-    const sheetRow = i + 2;
+	for (let i = 0; i < values.length; i++) {
+		const row = values[i];
+		const sheetRow = i + 2;
 
-    const apiStatus = normalisePdfStatus_(row[statusCol - 1]);
-    const fileId = (row[fileIdCol - 1] || '').toString().trim();
+		const apiStatus = normalisePdfStatus_(row[statusCol - 1]);
+		const fileId = (row[fileIdCol - 1] || "").toString().trim();
 
-    if (!fileId) continue;
+		if (!fileId) continue;
 
-    if (
-      apiStatus === '' ||
-      apiStatus === 'PENDING' ||
-      apiStatus === 'FAILED' ||
-      apiStatus === 'ERROR' ||
-      apiStatus === 'RETRY'
-    ) {
-      return {
-        rowNumber: sheetRow,
-        fileName: row[fileNameCol - 1] || '',
-      };
-    }
-  }
+		if (
+			apiStatus === "" ||
+			apiStatus === "PENDING" ||
+			apiStatus === "FAILED" ||
+			apiStatus === "ERROR" ||
+			apiStatus === "RETRY"
+		) {
+			return {
+				rowNumber: sheetRow,
+				fileName: row[fileNameCol - 1] || "",
+			};
+		}
+	}
 
-  return {
-    rowNumber: 0,
-    fileName: '',
-  };
+	return {
+		rowNumber: 0,
+		fileName: "",
+	};
 }
 
 /////////////////////////////////////
 // PROCESS ONE PDF ROW
+// HEADER-BASED PDF STAGING WRITE
+// NO POPUP HERE
 /////////////////////////////////////
 
 function processPdfRow(rowNumber) {
-  const ss = SpreadsheetApp.getActive();
-  const stagingSheet = ss.getSheetByName('PDF Staging');
-  const jsonSheet = ss.getSheetByName('PDF JSON Staging');
+	const ss = SpreadsheetApp.getActive();
+	const stagingSheet = ss.getSheetByName("PDF Staging");
+	const jsonSheet = ss.getSheetByName("PDF JSON Staging");
 
-  if (!stagingSheet) throw new Error('Sheet "PDF Staging" not found.');
-  if (!jsonSheet) throw new Error('Sheet "PDF JSON Staging" not found.');
+	if (!stagingSheet) throw new Error('Sheet "PDF Staging" not found.');
+	if (!jsonSheet) throw new Error('Sheet "PDF JSON Staging" not found.');
 
-  if (!rowNumber || rowNumber < 2) {
-    throw new Error('Please pass a valid row number, e.g. processPdfRow(2).');
-  }
+	if (!rowNumber || rowNumber < 2) {
+		throw new Error("Please pass a valid row number, e.g. processPdfRow(2).");
+	}
 
-  const data = stagingSheet.getRange(rowNumber, 1, 1, 8).getValues()[0];
+	const headers = getHeaderMap_(stagingSheet, 1);
 
-  const uploadTime = data[0];
-  const fileName = data[1];
-  const supplier = data[2];
-  const site = data[3];
-  const fileId = data[4];
+	const uploadTimeCol = getRequiredHeader_(
+		headers,
+		"Upload Time",
+		"PDF Staging",
+	);
+	const fileNameCol = getRequiredHeader_(headers, "File Name", "PDF Staging");
+	const supplierCol = getRequiredHeader_(headers, "Supplier", "PDF Staging");
+	const siteCol = getRequiredHeader_(headers, "Site", "PDF Staging");
+	const fileIdCol = getRequiredHeader_(headers, "Drive File ID", "PDF Staging");
+	const apiStatusCol = getRequiredHeader_(headers, "API Status", "PDF Staging");
+	const jsonStatusCol = getRequiredHeader_(
+		headers,
+		"JSON Status",
+		"PDF Staging",
+	);
+	const notesCol = getRequiredHeader_(headers, "Notes", "PDF Staging");
 
-  if (!fileId) {
-    throw new Error('No Drive File ID found on row ' + rowNumber);
-  }
+	const row = stagingSheet
+		.getRange(rowNumber, 1, 1, stagingSheet.getLastColumn())
+		.getValues()[0];
 
-  const file = DriveApp.getFileById(fileId);
-  const blob = file.getBlob();
-  const base64 = Utilities.base64Encode(blob.getBytes());
+	const uploadTime = row[uploadTimeCol - 1];
+	const fileName = row[fileNameCol - 1];
+	const supplier = row[supplierCol - 1];
+	const site = row[siteCol - 1];
+	const fileId = (row[fileIdCol - 1] || "").toString().trim();
 
-  const url = 'https://chefchops-pdf-parser-639314070996.europe-west1.run.app';
+	if (!fileId) {
+		throw new Error("No Drive File ID found on row " + rowNumber);
+	}
 
-  const payload = {
-    fileName: fileName,
-    supplier: supplier,
-    site: site,
-    base64Pdf: base64,
-  };
+	const file = DriveApp.getFileById(fileId);
+	const blob = file.getBlob();
+	const base64 = Utilities.base64Encode(blob.getBytes());
 
-  const options = {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
-  };
+	const url = "https://chefchops-pdf-parser-639314070996.europe-west1.run.app";
 
-  const response = UrlFetchApp.fetch(url, options);
-  const resultText = response.getContentText();
-  const statusCode = response.getResponseCode();
+	const payload = {
+		fileName: fileName,
+		supplier: supplier,
+		site: site,
+		base64Pdf: base64,
+	};
 
-  let parsed;
+	const options = {
+		method: "post",
+		contentType: "application/json",
+		payload: JSON.stringify(payload),
+		muteHttpExceptions: true,
+	};
 
-  try {
-    parsed = JSON.parse(resultText);
-  } catch (err) {
-    parsed = {
-      success: false,
-      error: 'Response was not valid JSON',
-      raw: resultText,
-    };
-  }
+	const response = UrlFetchApp.fetch(url, options);
+	const resultText = response.getContentText();
+	const statusCode = response.getResponseCode();
 
-  stagingSheet
-    .getRange(rowNumber, 6)
-    .setValue(statusCode === 200 ? 'DONE' : 'ERROR');
+	let parsed;
 
-  stagingSheet
-    .getRange(rowNumber, 7)
-    .setValue(parsed.success ? 'STORED' : 'FAILED');
+	try {
+		parsed = JSON.parse(resultText);
+	} catch (err) {
+		parsed = {
+			success: false,
+			error: "Response was not valid JSON",
+			raw: resultText,
+		};
+	}
 
-  stagingSheet
-    .getRange(rowNumber, 8)
-    .setValue(
-      parsed.success
-        ? 'JSON stored in PDF JSON Staging'
-        : parsed.error || 'Unknown error',
-    );
+	stagingSheet
+		.getRange(rowNumber, apiStatusCol)
+		.setValue(statusCode === 200 ? "DONE" : "ERROR");
 
-  clearJsonChunksForFile_(jsonSheet, fileId);
+	stagingSheet
+		.getRange(rowNumber, jsonStatusCol)
+		.setValue(parsed.success ? "STORED" : "FAILED");
 
-  writeJsonToStaging_(jsonSheet, {
-    uploadTime: uploadTime,
-    fileName: fileName,
-    supplier: supplier,
-    site: site,
-    fileId: fileId,
-    jsonText: resultText,
-  });
+	stagingSheet
+		.getRange(rowNumber, notesCol)
+		.setValue(
+			parsed.success
+				? "JSON stored in PDF JSON Staging"
+				: parsed.error || "Unknown error",
+		);
+
+	clearJsonChunksForFile_(jsonSheet, fileId);
+
+	writeJsonToStaging_(jsonSheet, {
+		uploadTime: uploadTime,
+		fileName: fileName,
+		supplier: supplier,
+		site: site,
+		fileId: fileId,
+		jsonText: resultText,
+	});
 }
 
 /////////////////////////////////////
@@ -315,267 +339,295 @@ function processPdfRow(rowNumber) {
 /////////////////////////////////////
 
 function buildNext5StoredPdfJsonFiles() {
-  buildStoredPdfJsonFiles_(5);
+	buildStoredPdfJsonFiles_(5);
 }
 
 /////////////////////////////////////
 // BUILD STORED PDF JSON FILES
+// BUILDS HEADER + EXTRACTED LINES + REVIEW
+// ONE FINAL POPUP ONLY
 /////////////////////////////////////
 
 function buildStoredPdfJsonFiles_(limit) {
-  const ss = SpreadsheetApp.getActive();
-  const ui = SpreadsheetApp.getUi();
+	const ss = SpreadsheetApp.getActive();
+	const ui = SpreadsheetApp.getUi();
 
-  const stagingSheet = ss.getSheetByName('PDF Staging');
+	const stagingSheet = ss.getSheetByName("PDF Staging");
 
-  if (!stagingSheet) {
-    ui.alert('Sheet "PDF Staging" not found.');
-    return;
-  }
+	if (!stagingSheet) {
+		ui.alert('Sheet "PDF Staging" not found.');
+		return;
+	}
 
-  const lastRow = stagingSheet.getLastRow();
+	const lastRow = stagingSheet.getLastRow();
 
-  if (lastRow < 2) {
-    ui.alert('No PDF rows found in PDF Staging.');
-    return;
-  }
+	if (lastRow < 2) {
+		ui.alert("No PDF rows found in PDF Staging.");
+		return;
+	}
 
-  const headers = getHeaderMap_(stagingSheet, 1);
+	const headers = getHeaderMap_(stagingSheet, 1);
 
-  const apiStatusCol = getRequiredHeader_(headers, 'API Status', 'PDF Staging');
-  const jsonStatusCol = getRequiredHeader_(
-    headers,
-    'JSON Status',
-    'PDF Staging',
-  );
-  const fileNameCol = getRequiredHeader_(headers, 'File Name', 'PDF Staging');
-  const fileIdCol = getRequiredHeader_(headers, 'Drive File ID', 'PDF Staging');
-  const notesCol = getRequiredHeader_(headers, 'Notes', 'PDF Staging');
+	const apiStatusCol = getRequiredHeader_(headers, "API Status", "PDF Staging");
+	const jsonStatusCol = getRequiredHeader_(
+		headers,
+		"JSON Status",
+		"PDF Staging",
+	);
+	const fileNameCol = getRequiredHeader_(headers, "File Name", "PDF Staging");
+	const fileIdCol = getRequiredHeader_(headers, "Drive File ID", "PDF Staging");
+	const notesCol = getRequiredHeader_(headers, "Notes", "PDF Staging");
 
-  const values = stagingSheet
-    .getRange(2, 1, lastRow - 1, stagingSheet.getLastColumn())
-    .getValues();
+	const values = stagingSheet
+		.getRange(2, 1, lastRow - 1, stagingSheet.getLastColumn())
+		.getValues();
 
-  let built = 0;
-  let failed = 0;
-  const messages = [];
+	let built = 0;
+	let failed = 0;
+	const messages = [];
 
-  for (let i = 0; i < values.length; i++) {
-    if (built >= limit) break;
+	for (let i = 0; i < values.length; i++) {
+		if (built >= limit) break;
 
-    const row = values[i];
-    const sheetRow = i + 2;
+		const row = values[i];
+		const sheetRow = i + 2;
 
-    const apiStatus = normalisePdfStatus_(row[apiStatusCol - 1]);
-    const jsonStatus = normalisePdfStatus_(row[jsonStatusCol - 1]);
-    const fileName = row[fileNameCol - 1] || '';
-    const fileId = (row[fileIdCol - 1] || '').toString().trim();
+		const apiStatus = normalisePdfStatus_(row[apiStatusCol - 1]);
+		const jsonStatus = normalisePdfStatus_(row[jsonStatusCol - 1]);
+		const fileName = row[fileNameCol - 1] || "";
+		const fileId = (row[fileIdCol - 1] || "").toString().trim();
 
-    if (!fileId) continue;
-    if (apiStatus !== 'DONE') continue;
-    if (jsonStatus !== 'STORED') continue;
+		if (!fileId) continue;
+		if (apiStatus !== "DONE") continue;
+		if (jsonStatus !== "STORED") continue;
 
-    try {
-      stagingSheet.getRange(sheetRow, jsonStatusCol).setValue('BUILDING');
+		try {
+			stagingSheet.getRange(sheetRow, jsonStatusCol).setValue("BUILDING");
 
-      const result = buildPdfHeaderExtractedLinesAndReviewForFile_(fileId);
+			const result = buildPdfHeaderExtractedLinesAndReviewForFile_(fileId);
+			const reviewCount = result && result.reviewCount ? result.reviewCount : 0;
+			const extractedCount =
+				result && result.extractedCount ? result.extractedCount : "Done";
 
-      if (result.reviewCount > 0) {
-        stagingSheet
-          .getRange(sheetRow, jsonStatusCol)
-          .setValue('REVIEW NEEDED');
-        stagingSheet
-          .getRange(sheetRow, notesCol)
-          .setValue(
-            'Header + Extracted Lines + Review built | Rows needing review: ' +
-              result.reviewCount,
-          );
-      } else {
-        stagingSheet
-          .getRange(sheetRow, jsonStatusCol)
-          .setValue('READY TO APPEND');
-        stagingSheet
-          .getRange(sheetRow, notesCol)
-          .setValue('Header + Extracted Lines + Review built | No review rows');
-      }
+			if (reviewCount > 0) {
+				stagingSheet
+					.getRange(sheetRow, jsonStatusCol)
+					.setValue("REVIEW NEEDED");
 
-      built++;
+				stagingSheet
+					.getRange(sheetRow, notesCol)
+					.setValue(
+						"Header + Extracted Lines + Review built | Rows needing review: " +
+							reviewCount,
+					);
+			} else {
+				stagingSheet
+					.getRange(sheetRow, jsonStatusCol)
+					.setValue("READY TO APPEND");
 
-      messages.push(
-        'OK row ' +
-          sheetRow +
-          ': ' +
-          fileName +
-          ' | Lines: ' +
-          (result && result.extractedCount ? result.extractedCount : 'Done') +
-          ' | Review: ' +
-          (result && result.reviewCount ? result.reviewCount : 0),
-      );
-    } catch (err) {
-      failed++;
+				stagingSheet
+					.getRange(sheetRow, notesCol)
+					.setValue("Header + Extracted Lines + Review built | No review rows");
+			}
 
-      stagingSheet.getRange(sheetRow, jsonStatusCol).setValue('FAILED');
-      stagingSheet
-        .getRange(sheetRow, notesCol)
-        .setValue('Build failed: ' + err.message);
+			built++;
 
-      messages.push(
-        'FAILED row ' + sheetRow + ': ' + fileName + ' | ' + err.message,
-      );
-    }
-  }
+			messages.push(
+				"OK row " +
+					sheetRow +
+					": " +
+					fileName +
+					" | Lines: " +
+					extractedCount +
+					" | Review: " +
+					reviewCount,
+			);
+		} catch (err) {
+			failed++;
 
-  ui.alert(
-    'PDF JSON build batch complete.\n\n' +
-      'Limit: ' +
-      limit +
-      '\n' +
-      'Built: ' +
-      built +
-      '\n' +
-      'Failed: ' +
-      failed +
-      '\n\n' +
-      messages.slice(0, 15).join('\n') +
-      (messages.length > 15 ? '\n\nMore results not shown.' : ''),
-  );
+			stagingSheet.getRange(sheetRow, jsonStatusCol).setValue("FAILED");
+
+			stagingSheet
+				.getRange(sheetRow, notesCol)
+				.setValue("Build failed: " + err.message);
+
+			messages.push(
+				"FAILED row " + sheetRow + ": " + fileName + " | " + err.message,
+			);
+		}
+	}
+
+	ui.alert(
+		"PDF JSON build batch complete.\n\n" +
+			"Limit: " +
+			limit +
+			"\n" +
+			"Built: " +
+			built +
+			"\n" +
+			"Failed: " +
+			failed +
+			"\n\n" +
+			messages.slice(0, 15).join("\n") +
+			(messages.length > 15 ? "\n\nMore results not shown." : ""),
+	);
 }
 
 /////////////////////////////////////
 // BUILD HEADER + EXTRACTED LINES + REVIEW FOR LAST PDF ROW
+// LEGACY HELPER - NOT ON MAIN MENU
 /////////////////////////////////////
 
 function buildExtractedLinesForLastPdfRow_() {
-  const ss = SpreadsheetApp.getActive();
-  const stagingSheet = ss.getSheetByName('PDF Staging');
-  const ui = SpreadsheetApp.getUi();
+	const ss = SpreadsheetApp.getActive();
+	const stagingSheet = ss.getSheetByName("PDF Staging");
+	const ui = SpreadsheetApp.getUi();
 
-  if (!stagingSheet) {
-    ui.alert('Sheet "PDF Staging" not found.');
-    return;
-  }
+	if (!stagingSheet) {
+		ui.alert('Sheet "PDF Staging" not found.');
+		return;
+	}
 
-  const lastRow = stagingSheet.getLastRow();
+	const lastRow = stagingSheet.getLastRow();
 
-  if (lastRow < 2) {
-    ui.alert('No PDF rows found in PDF Staging.');
-    return;
-  }
+	if (lastRow < 2) {
+		ui.alert("No PDF rows found in PDF Staging.");
+		return;
+	}
 
-  const fileId = stagingSheet.getRange(lastRow, 5).getValue();
+	const headers = getHeaderMap_(stagingSheet, 1);
+	const fileIdCol = getRequiredHeader_(headers, "Drive File ID", "PDF Staging");
 
-  if (!fileId) {
-    ui.alert('No Drive File ID found on the last PDF row.');
-    return;
-  }
+	const fileId = stagingSheet
+		.getRange(lastRow, fileIdCol)
+		.getValue()
+		.toString()
+		.trim();
 
-  const result = buildPdfHeaderExtractedLinesAndReviewForFile_(fileId);
+	if (!fileId) {
+		ui.alert("No Drive File ID found on the last PDF row.");
+		return;
+	}
 
-  ui.alert(
-    'Built Header + Extracted Lines + Review for file ID: ' +
-      fileId +
-      '\n\nExtracted rows: ' +
-      (result && result.extractedCount ? result.extractedCount : 'Done') +
-      '\nRows needing review: ' +
-      (result && result.reviewCount ? result.reviewCount : 0),
-  );
+	const result = buildPdfHeaderExtractedLinesAndReviewForFile_(fileId);
+
+	ui.alert(
+		"Built Header + Extracted Lines + Review for file ID: " +
+			fileId +
+			"\n\nExtracted rows: " +
+			(result && result.extractedCount ? result.extractedCount : "Done") +
+			"\nRows needing review: " +
+			(result && result.reviewCount ? result.reviewCount : 0),
+	);
 }
 
 /////////////////////////////////////
 // BUILD PARSED ROWS FOR LAST PDF ROW
+// LEGACY HELPER - OLD INVOICE IMPORT ROUTE
 /////////////////////////////////////
 
 function buildParsedRowsForLastPdfRow_() {
-  const ss = SpreadsheetApp.getActive();
-  const stagingSheet = ss.getSheetByName('PDF Staging');
-  const ui = SpreadsheetApp.getUi();
+	const ss = SpreadsheetApp.getActive();
+	const stagingSheet = ss.getSheetByName("PDF Staging");
+	const ui = SpreadsheetApp.getUi();
 
-  if (!stagingSheet) {
-    ui.alert('Sheet "PDF Staging" not found.');
-    return;
-  }
+	if (!stagingSheet) {
+		ui.alert('Sheet "PDF Staging" not found.');
+		return;
+	}
 
-  const lastRow = stagingSheet.getLastRow();
+	const lastRow = stagingSheet.getLastRow();
 
-  if (lastRow < 2) {
-    ui.alert('No PDF rows found in PDF Staging.');
-    return;
-  }
+	if (lastRow < 2) {
+		ui.alert("No PDF rows found in PDF Staging.");
+		return;
+	}
 
-  const fileId = stagingSheet.getRange(lastRow, 5).getValue();
+	const headers = getHeaderMap_(stagingSheet, 1);
+	const fileIdCol = getRequiredHeader_(headers, "Drive File ID", "PDF Staging");
 
-  if (!fileId) {
-    ui.alert('No Drive File ID found on the last PDF row.');
-    return;
-  }
+	const fileId = stagingSheet
+		.getRange(lastRow, fileIdCol)
+		.getValue()
+		.toString()
+		.trim();
 
-  const result = buildParsedRowsFromExtractedLines_(fileId);
+	if (!fileId) {
+		ui.alert("No Drive File ID found on the last PDF row.");
+		return;
+	}
 
-  ui.alert(
-    'Built parsed rows for file ID: ' +
-      fileId +
-      '\n\nRows written: ' +
-      (result && result.rowsWritten ? result.rowsWritten : 'Done'),
-  );
+	const result = buildParsedRowsFromExtractedLines_(fileId);
+
+	ui.alert(
+		"Built parsed rows for file ID: " +
+			fileId +
+			"\n\nRows written: " +
+			(result && result.rowsWritten ? result.rowsWritten : "Done"),
+	);
 }
 
 /////////////////////////////////////
 // LOAD PDF PARSED ROWS TO INVOICE IMPORT RAW
+// LEGACY HELPER - OLD INVOICE IMPORT ROUTE
 /////////////////////////////////////
 
 function loadPdfLinesToInvoiceImportRaw_() {
-  const ss = SpreadsheetApp.getActive();
-  const ui = SpreadsheetApp.getUi();
+	const ss = SpreadsheetApp.getActive();
+	const ui = SpreadsheetApp.getUi();
 
-  const invoiceSheet = ss.getSheetByName('Invoice Import');
+	const invoiceSheet = ss.getSheetByName("Invoice Import");
 
-  if (!invoiceSheet) {
-    ui.alert('Missing "Invoice Import" sheet.');
-    return;
-  }
+	if (!invoiceSheet) {
+		ui.alert('Missing "Invoice Import" sheet.');
+		return;
+	}
 
-  const context = getConfirmedInvoiceContext();
+	const context = getConfirmedInvoiceContext();
 
-  if (!context) return;
+	if (!context) return;
 
-  const supplier = (context.supplier || '').toString().trim();
-  const site = (context.site || '').toString().trim();
+	const supplier = (context.supplier || "").toString().trim();
+	const site = (context.site || "").toString().trim();
 
-  const rows = getPdfParsedRowsForContext_(supplier, site);
+	const rows = getPdfParsedRowsForContext_(supplier, site);
 
-  if (!rows.length) {
-    ui.alert(
-      'No PDF parsed rows found for ' +
-        supplier +
-        (site ? ' / ' + site : '') +
-        '.',
-    );
-    return;
-  }
+	if (!rows.length) {
+		ui.alert(
+			"No PDF parsed rows found for " +
+				supplier +
+				(site ? " / " + site : "") +
+				".",
+		);
+		return;
+	}
 
-  clearInvoiceImportSilent_();
+	clearInvoiceImportSilent_();
 
-  invoiceSheet.getRange('B4').setValue(supplier);
-  invoiceSheet.getRange('B5').setValue(site);
+	invoiceSheet.getRange("B4").setValue(supplier);
+	invoiceSheet.getRange("B5").setValue(site);
 
-  const startRow = 8;
+	const startRow = 8;
 
-  const output = rows.map(function (r) {
-    return [r.description || '', r.qty || '', r.unit || '', r.unitPrice || ''];
-  });
+	const output = rows.map((r) => [
+		r.description || "",
+		r.qty || "",
+		r.unit || "",
+		r.unitPrice || "",
+	]);
 
-  invoiceSheet.getRange(startRow, 1, output.length, 4).setValues(output);
+	invoiceSheet.getRange(startRow, 1, output.length, 4).setValues(output);
 
-  ui.alert(
-    'PDF parsed rows loaded into Invoice Import raw area.\n\n' +
-      'Supplier: ' +
-      supplier +
-      '\n' +
-      'Rows loaded: ' +
-      output.length +
-      '\n\n' +
-      'Now run Build Invoice Import.',
-  );
+	ui.alert(
+		"PDF parsed rows loaded into Invoice Import raw area.\n\n" +
+			"Supplier: " +
+			supplier +
+			"\n" +
+			"Rows loaded: " +
+			output.length +
+			"\n\n" +
+			"Now run Build Invoice Import.",
+	);
 }
 
 /////////////////////////////////////
@@ -583,5 +635,5 @@ function loadPdfLinesToInvoiceImportRaw_() {
 /////////////////////////////////////
 
 function normalisePdfStatus_(value) {
-  return (value || '').toString().trim().toUpperCase();
+	return (value || "").toString().trim().toUpperCase();
 }

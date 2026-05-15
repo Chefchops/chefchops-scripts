@@ -1,5 +1,6 @@
 /////////////////////////////////////
 // BUILD EXTRACTED LINES FROM PDF JSON
+// NO POPUP HERE - SAFE FOR BATCH RUNS
 /////////////////////////////////////
 
 function buildExtractedLinesFromPdfJson_(fileId) {
@@ -11,16 +12,9 @@ function buildExtractedLinesFromPdfJson_(fileId) {
   const invoiceHeader = json.invoiceHeader || json.invoice_header || {};
 
   const resolvedSite =
-    json.site ||
-    invoiceHeader.siteName ||
-    invoiceHeader.site_name ||
-    meta.site ||
-    '';
+    json.site || invoiceHeader.siteName || invoiceHeader.site_name || meta.site || '';
 
-  const supplier = (json.supplier || meta.supplier || '')
-    .toString()
-    .trim()
-    .toLowerCase();
+  const supplier = (json.supplier || meta.supplier || '').toString().trim().toLowerCase();
 
   let rows = [];
   let sourceType = '';
@@ -32,59 +26,53 @@ function buildExtractedLinesFromPdfJson_(fileId) {
     rows = json.pilgrimRows || [];
     sourceType = 'pilgrimRows';
   } else {
-    SpreadsheetApp.getUi().alert('Unsupported supplier in JSON: ' + supplier);
-    return 0;
+    throw new Error('Unsupported supplier in JSON: ' + supplier);
   }
 
   if (!rows.length) {
-    SpreadsheetApp.getUi().alert(
-      'No invoice rows found in JSON for supplier: ' +
-        (json.supplier || meta.supplier || ''),
+    throw new Error(
+      'No invoice rows found in JSON for supplier: ' + (json.supplier || meta.supplier || ''),
     );
-    return 0;
   }
 
   const sheet = getOrCreatePdfExtractedLinesSheet_();
 
   clearExtractedLinesForFile_(sheet, fileId);
 
-  const output = rows.map(function (row, index) {
-    return [
-      meta.uploadTime || new Date(),
-      json.fileName || meta.fileName || '',
-      json.supplier || meta.supplier || '',
-      resolvedSite,
-      fileId,
-      index + 1,
-      index + 1,
-      sourceType,
-      '',
-      '',
-      row.cases || '',
-      row.units_weight || '',
-      row.base_unit || '',
-      row.description || '',
-      row.pack_size || '',
-      row.item_code || '',
-      row.unit_price || '',
-      row.line_total || '',
-      row.vat || row.vat_rate || '',
-      row.vat_total || '',
-      row.reviewFlag || '',
-    ];
-  });
+  const output = rows.map((row, index) => [
+    meta.uploadTime || new Date(),
+    json.fileName || meta.fileName || '',
+    json.supplier || meta.supplier || '',
+    resolvedSite,
+    fileId,
+    index + 1,
+    index + 1,
+    sourceType,
+    '',
+    '',
+    row.cases || '',
+    row.units_weight || '',
+    row.base_unit || '',
+    row.description || '',
+    row.pack_size || '',
+    row.item_code || '',
+    row.unit_price || '',
+    row.line_total || '',
+    row.vat || row.vat_rate || '',
+    row.vat_total || '',
+    row.reviewFlag || '',
+  ]);
 
   const startRow = Math.max(sheet.getLastRow() + 1, 2);
 
-  sheet
-    .getRange(startRow, 1, output.length, output[0].length)
-    .setValues(output);
+  sheet.getRange(startRow, 1, output.length, output[0].length).setValues(output);
 
   return output.length;
 }
 
 /////////////////////////////////////
 // BUILD HEADER + EXTRACTED LINES + REVIEW FOR FILE
+// NO POPUP HERE - SAFE FOR BATCH RUNS
 /////////////////////////////////////
 
 function buildPdfHeaderExtractedLinesAndReviewForFile_(fileId) {
@@ -115,15 +103,16 @@ function buildPdfHeaderExtractedLinesAndReviewForFile_(fileId) {
   const reviewResult = getPdfReviewPopupResultForFile_(fileId);
 
   return {
-    extractedCount: extractedCount,
-    reviewCount: reviewResult.reviewCount,
-    popupLines: reviewResult.popupLines,
+    extractedCount: extractedCount || 0,
+    reviewCount: reviewResult && reviewResult.reviewCount ? reviewResult.reviewCount : 0,
+    popupLines: reviewResult && reviewResult.popupLines ? reviewResult.popupLines : [],
   };
 }
 
 /////////////////////////////////////
 // RUN HEADER + EXTRACTED LINES + REVIEW
 // ONE MENU ACTION
+// ONE FINAL POPUP ONLY
 /////////////////////////////////////
 
 function runBuildExtractedLinesFromPdfJson() {
@@ -146,13 +135,14 @@ function runBuildExtractedLinesFromPdfJson() {
           '1. PDF Invoice Headers updated\n' +
           '2. PDF Extracted Lines built\n' +
           '3. PDF Review built\n\n' +
+          'Extracted rows: ' +
+          result.extractedCount +
+          '\n' +
           'Rows needing review: ' +
           result.reviewCount +
           '\n\n' +
           result.popupLines.slice(0, 15).join('\n\n') +
-          (result.popupLines.length > 15
-            ? '\n\nMore rows exist in PDF Review.'
-            : ''),
+          (result.popupLines.length > 15 ? '\n\nMore rows exist in PDF Review.' : ''),
       );
     } else {
       ui.alert(
@@ -161,13 +151,14 @@ function runBuildExtractedLinesFromPdfJson() {
           '1. PDF Invoice Headers updated\n' +
           '2. PDF Extracted Lines built\n' +
           '3. PDF Review built\n\n' +
+          'Extracted rows: ' +
+          result.extractedCount +
+          '\n' +
           'No rows need review.',
       );
     }
   } catch (err) {
-    ui.alert(
-      'PDF build failed:\n\n' + (err && err.message ? err.message : err),
-    );
+    ui.alert('PDF build failed:\n\n' + (err && err.message ? err.message : err));
     throw err;
   }
 }
@@ -208,22 +199,16 @@ function getPdfReviewPopupResultForFile_(fileId) {
   const itemCodeCol = getOptionalHeader_(headers, 'Corrected Item Code');
   const notesCol = getOptionalHeader_(headers, 'Notes');
 
-  const data = sheet
-    .getRange(2, 1, lastRow - 1, sheet.getLastColumn())
-    .getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
 
   const popupLines = [];
 
-  data.forEach(function (row) {
-    const rowFileId = row[fileIdCol - 1]
-      ? row[fileIdCol - 1].toString().trim()
-      : '';
+  data.forEach((row) => {
+    const rowFileId = row[fileIdCol - 1] ? row[fileIdCol - 1].toString().trim() : '';
 
     if (rowFileId !== fileId.toString().trim()) return;
 
-    const status = row[statusCol - 1]
-      ? row[statusCol - 1].toString().trim()
-      : '';
+    const status = row[statusCol - 1] ? row[statusCol - 1].toString().trim() : '';
 
     if (status !== 'Pending' && status !== 'Needs Cloud Fix') return;
 
@@ -268,11 +253,40 @@ function getLatestPdfJsonDriveFileIdForPipeline_() {
   if (lastRow < 2) return '';
 
   const headers = getHeaderMap_(sheet, 1);
-  const driveFileIdCol = getRequiredHeader_(
-    headers,
-    'Drive File ID',
-    'PDF JSON Staging',
-  );
+  const driveFileIdCol = getRequiredHeader_(headers, 'Drive File ID', 'PDF JSON Staging');
+
+  const values = sheet.getRange(2, driveFileIdCol, lastRow - 1, 1).getValues();
+
+  for (let i = values.length - 1; i >= 0; i--) {
+    const fileId = values[i][0];
+
+    if (fileId) {
+      return fileId.toString().trim();
+    }
+  }
+
+  return '';
+}
+
+/////////////////////////////////////
+// GET LATEST PDF JSON DRIVE FILE ID
+// HEADER-BASED
+/////////////////////////////////////
+
+function getLatestPdfJsonDriveFileIdForPipeline_() {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getSheetByName('PDF JSON Staging');
+
+  if (!sheet) {
+    throw new Error('Sheet "PDF JSON Staging" not found.');
+  }
+
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) return '';
+
+  const headers = getHeaderMap_(sheet, 1);
+  const driveFileIdCol = getRequiredHeader_(headers, 'Drive File ID', 'PDF JSON Staging');
 
   const values = sheet.getRange(2, driveFileIdCol, lastRow - 1, 1).getValues();
 
@@ -331,10 +345,7 @@ function getOrCreatePdfExtractedLinesSheet_() {
 
   const headers = getPdfExtractedLinesHeaders_();
 
-  sheet
-    .getRange(1, 1, 1, headers.length)
-    .setValues([headers])
-    .setFontWeight('bold');
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
 
   sheet.setFrozenRows(1);
 
@@ -351,11 +362,7 @@ function clearExtractedLinesForFile_(sheet, fileId) {
   if (lastRow < 2) return;
 
   const headerMap = getHeaderMap_(sheet, 1);
-  const fileIdCol = getRequiredHeader_(
-    headerMap,
-    'Drive File ID',
-    'PDF Extracted Lines',
-  );
+  const fileIdCol = getRequiredHeader_(headerMap, 'Drive File ID', 'PDF Extracted Lines');
 
   const fileIds = sheet
     .getRange(2, fileIdCol, lastRow - 1, 1)

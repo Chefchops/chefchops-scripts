@@ -3,7 +3,7 @@
 /////////////////////////////////////
 
 function onOpen() {
-  buildChefchopsMenu_();
+	buildChefchopsMenu_();
 }
 
 /////////////////////////////////////
@@ -12,89 +12,89 @@ function onOpen() {
 /////////////////////////////////////
 
 function buildChefchopsMenu_() {
-  const ui = SpreadsheetApp.getUi();
+	const ui = SpreadsheetApp.getUi();
 
-  ui.createMenu('Chefchops')
+	ui.createMenu("Chefchops")
 
-    /////////////////////////////////////
-    // PDF PIPELINE
-    /////////////////////////////////////
+		/////////////////////////////////////
+		// PDF PIPELINE
+		/////////////////////////////////////
 
-    .addSubMenu(
-      ui
-        .createMenu('PDF Pipeline')
+		.addSubMenu(
+			ui
+				.createMenu("PDF Pipeline")
 
-        /////////////////////////////////////
-        // STEP 1 - IMPORT
-        /////////////////////////////////////
+				/////////////////////////////////////
+				// STEP 1 - IMPORT
+				/////////////////////////////////////
 
-        .addItem('1. Import PDFs From Drive', 'importPdfJobsFromDriveFolder')
+				.addItem("1. Import PDFs From Drive", "importPdfJobsFromDriveFolder")
 
-        .addSeparator()
+				.addSeparator()
 
-        /////////////////////////////////////
-        // STEP 2 - CLOUD PROCESSING
-        /////////////////////////////////////
+				/////////////////////////////////////
+				// STEP 2 - CLOUD PROCESSING
+				/////////////////////////////////////
 
-        .addItem('2. Process Next 5 PDFs (Cloud)', 'processNext5PendingPdfRows')
+				.addItem("2. Process Next 5 PDFs (Cloud)", "processNext5PendingPdfRows")
 
-        .addSeparator()
+				.addSeparator()
 
-        /////////////////////////////////////
-        // STEP 3 - BUILD HEADER + REVIEW
-        /////////////////////////////////////
+				/////////////////////////////////////
+				// STEP 3 - BUILD HEADER + REVIEW
+				/////////////////////////////////////
 
-        .addItem(
-          '3. Build Next 5 Stored PDFs + Review',
-          'buildNext5StoredPdfJsonFiles',
-        )
+				.addItem(
+					"3. Build Next 5 Stored PDFs + Review",
+					"buildNext5StoredPdfJsonFiles",
+				)
 
-        .addItem(
-          '3.1 Build Latest Stored PDF + Review',
-          'runBuildExtractedLinesFromPdfJson',
-        )
+				.addItem(
+					"3.1 Build Latest Stored PDF + Review",
+					"runBuildExtractedLinesFromPdfJson",
+				)
 
-        .addSeparator()
+				.addSeparator()
 
-        /////////////////////////////////////
-        // STEP 4 - CORRECTIONS + APPEND
-        /////////////////////////////////////
+				/////////////////////////////////////
+				// STEP 4 - CORRECTIONS + APPEND
+				/////////////////////////////////////
 
-        .addItem(
-          '4. Apply Corrections + Append to Ingredients Master',
-          'applyReviewCorrectionsThenAppendPdf',
-        ),
-    )
+				.addItem(
+					"4. Apply Corrections + Append to Ingredients Master",
+					"applyReviewCorrectionsThenAppendPdf",
+				),
+		)
 
-    /////////////////////////////////////
-    // PDF REVIEW
-    /////////////////////////////////////
+		/////////////////////////////////////
+		// PDF REVIEW
+		/////////////////////////////////////
 
-    .addSubMenu(
-      ui
-        .createMenu('PDF Review')
+		.addSubMenu(
+			ui
+				.createMenu("PDF Review")
 
-        .addItem('Setup Review Sheet', 'setupPdfReviewSheet')
-        .addItem('Apply Review Corrections Only', 'applyPdfReviewCorrections')
-        .addItem('Highlight Missing Fields', 'highlightPdfReviewMissingFields')
+				.addItem("Setup Review Sheet", "setupPdfReviewSheet")
+				.addItem("Apply Review Corrections Only", "applyPdfReviewCorrections")
+				.addItem("Highlight Missing Fields", "highlightPdfReviewMissingFields")
 
-        .addSeparator()
+				.addSeparator()
 
-        .addItem('Clear Review Sheet', 'clearPdfReviewSheet'),
-    )
+				.addItem("Clear Review Sheet", "clearPdfReviewSheet"),
+		)
 
-    /////////////////////////////////////
-    // PRICE TOOLS
-    /////////////////////////////////////
+		/////////////////////////////////////
+		// PRICE TOOLS
+		/////////////////////////////////////
 
-    .addSubMenu(
-      ui
-        .createMenu('Price Tools')
+		.addSubMenu(
+			ui
+				.createMenu("Price Tools")
 
-        .addItem('Setup Price Search', 'setupPriceSearchSheet')
-        .addItem('Run Price Search', 'runPriceSearch')
-        .addItem('Clear Price Search', 'clearPriceSearchResults'),
-    )
+				.addItem("Setup Price Search", "setupPriceSearchSheet")
+				.addItem("Run Price Search", "runPriceSearch")
+				.addItem("Clear Price Search", "clearPriceSearchResults"),
+		)
 
-    .addToUi();
+		.addToUi();
 }

@@ -15,210 +15,308 @@
 
 /////////////////////////////////////
 // APPLY REVIEW CORRECTIONS THEN APPEND
+// ONE CONFIRMATION POPUP
+// ONE FINAL RESULT POPUP
 /////////////////////////////////////
 
 function applyReviewCorrectionsThenAppendPdf() {
-  const ui = SpreadsheetApp.getUi();
+	const ui = SpreadsheetApp.getUi();
 
-  const response = ui.alert(
-    'Apply review corrections and append?',
-    'This will first apply approved PDF Review corrections, then append/update Ingredients Master.\n\nContinue?',
-    ui.ButtonSet.YES_NO,
-  );
+	const response = ui.alert(
+		"Apply corrections and append?",
+		"This will:\n\n" +
+			"1. Apply Approved / Ignore Row corrections from PDF Review\n" +
+			"2. Check there are no Pending or Needs Cloud Fix review rows\n" +
+			"3. Append/update Ingredients Master\n\n" +
+			"Pack Price will be taken from Unit Price, not Line Total.\n\n" +
+			"Continue?",
+		ui.ButtonSet.YES_NO,
+	);
 
-  if (response !== ui.Button.YES) return;
+	if (response !== ui.Button.YES) return;
 
-  applyPdfReviewCorrections();
+	try {
+		const correctionResult = applyPdfReviewCorrections({
+			silent: true,
+			confirm: false,
+		});
 
-  appendReviewedPdfExtractedLinesToIngredientsMaster();
+		const appendResult = appendReviewedPdfExtractedLinesToIngredientsMaster({
+			silent: true,
+			confirm: false,
+		});
+
+		ui.alert(
+			"PDF corrections + append complete.\n\n" +
+				"Corrections applied: " +
+				correctionResult.applied +
+				"\n" +
+				"Rows ignored: " +
+				correctionResult.ignored +
+				"\n" +
+				"Correction rows skipped: " +
+				correctionResult.skipped +
+				"\n\n" +
+				"Updated in Master: " +
+				appendResult.updated +
+				"\n" +
+				"Appended to Master: " +
+				appendResult.appended +
+				"\n" +
+				"Ignored from append: " +
+				appendResult.ignored +
+				"\n" +
+				"Skipped from append: " +
+				appendResult.skipped +
+				"\n\n" +
+				"Pack Price mapped from Unit Price.",
+		);
+	} catch (err) {
+		ui.alert(
+			"PDF corrections + append failed:\n\n" +
+				(err && err.message ? err.message : err),
+		);
+
+		throw err;
+	}
 }
 
-function appendReviewedPdfExtractedLinesToIngredientsMaster() {
-  const ss = SpreadsheetApp.getActive();
-  const ui = SpreadsheetApp.getUi();
+/////////////////////////////////////
+// APPEND REVIEWED PDF EXTRACTED LINES TO INGREDIENTS MASTER
+// OPTIONS:
+// - silent: true = no final popup
+// - confirm: false = skip confirmation popup
+/////////////////////////////////////
 
-  const extractedSheet = ss.getSheetByName('PDF Extracted Lines');
-  const reviewSheet = ss.getSheetByName('PDF Review');
-  const masterSheet = ss.getSheetByName('Ingredients Master');
+function appendReviewedPdfExtractedLinesToIngredientsMaster(options) {
+	const ss = SpreadsheetApp.getActive();
+	const ui = SpreadsheetApp.getUi();
 
-  if (!extractedSheet) throw new Error('Missing sheet: PDF Extracted Lines');
-  if (!reviewSheet) throw new Error('Missing sheet: PDF Review');
-  if (!masterSheet) throw new Error('Missing sheet: Ingredients Master');
+	const silent = options && options.silent === true;
+	const confirm = !(options && options.confirm === false);
 
-  const fileId = getLatestPdfExtractedDriveFileId_();
+	const extractedSheet = ss.getSheetByName("PDF Extracted Lines");
+	const reviewSheet = ss.getSheetByName("PDF Review");
+	const masterSheet = ss.getSheetByName("Ingredients Master");
 
-  if (!fileId) {
-    ui.alert('No Drive File ID found.');
-    return;
-  }
+	if (!extractedSheet) throw new Error("Missing sheet: PDF Extracted Lines");
+	if (!reviewSheet) throw new Error("Missing sheet: PDF Review");
+	if (!masterSheet) throw new Error("Missing sheet: Ingredients Master");
 
-  if (hasBlockingPdfReviewRows_(reviewSheet, fileId)) {
-    ui.alert(
-      'Cannot append.\n\nReview still has Pending or Needs Cloud Fix rows.',
-    );
-    return;
-  }
+	const fileId = getLatestPdfExtractedDriveFileId_();
 
-  const response = ui.alert(
-    'Append PDF to Ingredients Master?',
-    'This will update and append ingredients.\n\nPack Price will be taken from Unit Price, not Line Total.',
-    ui.ButtonSet.YES_NO,
-  );
+	if (!fileId) {
+		if (!silent) ui.alert("No Drive File ID found.");
 
-  if (response !== ui.Button.YES) return;
+		return {
+			updated: 0,
+			appended: 0,
+			ignored: 0,
+			skipped: 0,
+		};
+	}
 
-  const extractedHeaders = getHeaderMap_(extractedSheet, 1);
-  const masterHeaders = getHeaderMap_(masterSheet, 1);
+	if (hasBlockingPdfReviewRows_(reviewSheet, fileId)) {
+		if (!silent) {
+			ui.alert(
+				"Cannot append.\n\nReview still has Pending or Needs Cloud Fix rows.",
+			);
+		}
 
-  const lastExtractedRow = extractedSheet.getLastRow();
+		throw new Error(
+			"Cannot append. Review still has Pending or Needs Cloud Fix rows.",
+		);
+	}
 
-  if (lastExtractedRow < 2) {
-    ui.alert('No rows found on PDF Extracted Lines.');
-    return;
-  }
+	if (confirm) {
+		const response = ui.alert(
+			"Append PDF to Ingredients Master?",
+			"This will update and append ingredients.\n\nPack Price will be taken from Unit Price, not Line Total.",
+			ui.ButtonSet.YES_NO,
+		);
 
-  const extractedValues = extractedSheet
-    .getRange(2, 1, lastExtractedRow - 1, extractedSheet.getLastColumn())
-    .getValues();
+		if (response !== ui.Button.YES) {
+			return {
+				updated: 0,
+				appended: 0,
+				ignored: 0,
+				skipped: 0,
+				cancelled: true,
+			};
+		}
+	}
 
-  const masterValues =
-    masterSheet.getLastRow() > 1
-      ? masterSheet
-          .getRange(
-            2,
-            1,
-            masterSheet.getLastRow() - 1,
-            masterSheet.getLastColumn(),
-          )
-          .getValues()
-      : [];
+	const extractedHeaders = getHeaderMap_(extractedSheet, 1);
+	const masterHeaders = getHeaderMap_(masterSheet, 1);
 
-  const masterLookup = buildIngredientsMasterLookup_(
-    masterValues,
-    masterHeaders,
-  );
+	const lastExtractedRow = extractedSheet.getLastRow();
 
-  let appended = 0;
-  let updated = 0;
-  let ignored = 0;
-  let skipped = 0;
+	if (lastExtractedRow < 2) {
+		if (!silent) ui.alert("No rows found on PDF Extracted Lines.");
 
-  extractedValues.forEach(function (row) {
-    const rowFileId = getValueByHeader_(row, extractedHeaders, 'Drive File ID');
+		return {
+			updated: 0,
+			appended: 0,
+			ignored: 0,
+			skipped: 0,
+		};
+	}
 
-    if ((rowFileId || '').toString().trim() !== fileId.toString().trim())
-      return;
+	const extractedValues = extractedSheet
+		.getRange(2, 1, lastExtractedRow - 1, extractedSheet.getLastColumn())
+		.getValues();
 
-    const reviewFlag = (
-      getValueByHeader_(row, extractedHeaders, 'Review Flag') || ''
-    )
-      .toString()
-      .trim();
+	const masterValues =
+		masterSheet.getLastRow() > 1
+			? masterSheet
+					.getRange(
+						2,
+						1,
+						masterSheet.getLastRow() - 1,
+						masterSheet.getLastColumn(),
+					)
+					.getValues()
+			: [];
 
-    if (reviewFlag === 'IGNORE') {
-      ignored++;
-      return;
-    }
+	const masterLookup = buildIngredientsMasterLookup_(
+		masterValues,
+		masterHeaders,
+	);
 
-    const description = getValueByHeader_(row, extractedHeaders, 'Description');
-    const supplier = getValueByHeader_(row, extractedHeaders, 'Supplier');
-    const itemCode = getValueByHeader_(row, extractedHeaders, 'Item Code');
-    const packSize = getValueByHeader_(row, extractedHeaders, 'Pack Size');
+	let appended = 0;
+	let updated = 0;
+	let ignored = 0;
+	let skipped = 0;
 
-    const cases = getValueByHeader_(row, extractedHeaders, 'Cases');
-    const packPriceRaw = getValueByHeader_(row, extractedHeaders, 'Unit Price');
-    const lineTotal = getValueByHeader_(row, extractedHeaders, 'Line Total');
+	extractedValues.forEach((row) => {
+		const rowFileId = getValueByHeader_(row, extractedHeaders, "Drive File ID");
 
-    const packPrice = toPdfNumber_(packPriceRaw);
+		if ((rowFileId || "").toString().trim() !== fileId.toString().trim()) {
+			return;
+		}
 
-    if (!description || !supplier || !packSize || !packPrice) {
-      skipped++;
-      return;
-    }
-    /////////////////////////////////////
-    // PACK SIZE PARSING
-    /////////////////////////////////////
+		const reviewFlag = (
+			getValueByHeader_(row, extractedHeaders, "Review Flag") || ""
+		)
+			.toString()
+			.trim();
 
-    const parsed = parsePackSizeToUnitsStandard_(packSize);
+		if (reviewFlag === "IGNORE") {
+			ignored++;
+			return;
+		}
 
-    const standardPackSize = parsed.displayPackSize || packSize || '';
+		const description = getValueByHeader_(row, extractedHeaders, "Description");
+		const supplier = getValueByHeader_(row, extractedHeaders, "Supplier");
+		const itemCode = getValueByHeader_(row, extractedHeaders, "Item Code");
+		const packSize = getValueByHeader_(row, extractedHeaders, "Pack Size");
 
-    const baseUnitRaw = getValueByHeader_(row, extractedHeaders, 'Base Unit');
-    const baseUnit = parsed.baseUnit || baseUnitRaw || '';
+		const cases = getValueByHeader_(row, extractedHeaders, "Cases");
+		const packPriceRaw = getValueByHeader_(row, extractedHeaders, "Unit Price");
+		const lineTotal = getValueByHeader_(row, extractedHeaders, "Line Total");
 
-    const packQty = parsed.packQty || '';
-    const unitPerCase = parsed.unitPerCase || '';
+		const packPrice = toPdfNumber_(packPriceRaw);
 
-    let costPerUnit = '';
+		if (!description || !supplier || !packSize || !packPrice) {
+			skipped++;
+			return;
+		}
 
-    if (packPrice && unitPerCase) {
-      costPerUnit = packPrice / Number(unitPerCase);
-    }
+		/////////////////////////////////////
+		// PACK SIZE PARSING
+		/////////////////////////////////////
 
-    const cleanName = cleanIngredientNameForPdfAppend_(description);
+		const parsed = parsePackSizeToUnitsStandard_(packSize);
 
-    const codeKey = makePdfMasterCodeKey_(supplier, itemCode);
-    const fallbackKey = makePdfMasterFallbackKey_(
-      supplier,
-      cleanName,
-      standardPackSize,
-      baseUnit,
-    );
+		const standardPackSize = parsed.displayPackSize || packSize || "";
 
-    const existingRow =
-      itemCode && masterLookup.byCode[codeKey]
-        ? masterLookup.byCode[codeKey]
-        : masterLookup.byFallback[fallbackKey];
+		const baseUnitRaw = getValueByHeader_(row, extractedHeaders, "Base Unit");
+		const baseUnit = parsed.baseUnit || baseUnitRaw || "";
 
-    const data = {
-      supplier: supplier,
-      itemCode: itemCode,
-      description: description,
-      cleanName: cleanName,
-      packSize: standardPackSize,
-      packQty: packQty,
-      packPrice: packPrice,
-      baseUnit: baseUnit,
-      costPerUnit: costPerUnit,
-      unitPerCase: unitPerCase,
-      cases: cases,
-      lineTotal: lineTotal,
-      packParseFlag: parsed.reviewFlag,
-      packParseNotes: parsed.notes,
-    };
+		const packQty = parsed.packQty || "";
+		const unitPerCase = parsed.unitPerCase || "";
 
-    if (existingRow) {
-      updateIngredientsMasterFromPdfRow_(
-        masterSheet,
-        masterHeaders,
-        existingRow,
-        data,
-      );
-      updated++;
-    } else {
-      appendIngredientsMasterFromPdfRow_(masterSheet, masterHeaders, data);
-      appended++;
-    }
-  });
+		let costPerUnit = "";
 
-  formatIngredientsMasterCostingColumns_();
+		if (packPrice && unitPerCase) {
+			costPerUnit = packPrice / Number(unitPerCase);
+		}
 
-  ui.alert(
-    'Append complete\n\n' +
-      'Updated: ' +
-      updated +
-      '\n' +
-      'Appended: ' +
-      appended +
-      '\n' +
-      'Ignored: ' +
-      ignored +
-      '\n' +
-      'Skipped: ' +
-      skipped +
-      '\n\n' +
-      'Pack Price mapped from Unit Price.',
-  );
+		const cleanName = cleanIngredientNameForPdfAppend_(description);
+
+		const codeKey = makePdfMasterCodeKey_(supplier, itemCode);
+		const fallbackKey = makePdfMasterFallbackKey_(
+			supplier,
+			cleanName,
+			standardPackSize,
+			baseUnit,
+		);
+
+		const existingRow =
+			itemCode && masterLookup.byCode[codeKey]
+				? masterLookup.byCode[codeKey]
+				: masterLookup.byFallback[fallbackKey];
+
+		const data = {
+			supplier: supplier,
+			itemCode: itemCode,
+			description: description,
+			cleanName: cleanName,
+			packSize: standardPackSize,
+			packQty: packQty,
+			packPrice: packPrice,
+			baseUnit: baseUnit,
+			costPerUnit: costPerUnit,
+			unitPerCase: unitPerCase,
+			cases: cases,
+			lineTotal: lineTotal,
+			packParseFlag: parsed.reviewFlag,
+			packParseNotes: parsed.notes,
+		};
+
+		if (existingRow) {
+			updateIngredientsMasterFromPdfRow_(
+				masterSheet,
+				masterHeaders,
+				existingRow,
+				data,
+			);
+			updated++;
+		} else {
+			appendIngredientsMasterFromPdfRow_(masterSheet, masterHeaders, data);
+			appended++;
+		}
+	});
+
+	formatIngredientsMasterCostingColumns_();
+
+	const result = {
+		updated: updated,
+		appended: appended,
+		ignored: ignored,
+		skipped: skipped,
+	};
+
+	if (!silent) {
+		ui.alert(
+			"Append complete\n\n" +
+				"Updated: " +
+				updated +
+				"\n" +
+				"Appended: " +
+				appended +
+				"\n" +
+				"Ignored: " +
+				ignored +
+				"\n" +
+				"Skipped: " +
+				skipped +
+				"\n\n" +
+				"Pack Price mapped from Unit Price.",
+		);
+	}
+
+	return result;
 }
 
 /////////////////////////////////////
@@ -226,42 +324,42 @@ function appendReviewedPdfExtractedLinesToIngredientsMaster() {
 /////////////////////////////////////
 
 function getLatestPdfExtractedDriveFileId_() {
-  const ss = SpreadsheetApp.getActive();
-  const sheet = ss.getSheetByName('PDF Extracted Lines');
+	const ss = SpreadsheetApp.getActive();
+	const sheet = ss.getSheetByName("PDF Extracted Lines");
 
-  if (!sheet || sheet.getLastRow() < 2) return '';
+	if (!sheet || sheet.getLastRow() < 2) return "";
 
-  const headers = getHeaderMap_(sheet, 1);
-  const fileIdCol = getRequiredHeader_(
-    headers,
-    'Drive File ID',
-    'PDF Extracted Lines',
-  );
+	const headers = getHeaderMap_(sheet, 1);
+	const fileIdCol = getRequiredHeader_(
+		headers,
+		"Drive File ID",
+		"PDF Extracted Lines",
+	);
 
-  return sheet.getRange(sheet.getLastRow(), fileIdCol).getValue();
+	return sheet.getRange(sheet.getLastRow(), fileIdCol).getValue();
 }
 
 function hasBlockingPdfReviewRows_(reviewSheet, fileId) {
-  const lastRow = reviewSheet.getLastRow();
-  if (lastRow < 2) return false;
+	const lastRow = reviewSheet.getLastRow();
+	if (lastRow < 2) return false;
 
-  const headers = getHeaderMap_(reviewSheet, 1);
-  const fileIdCol = getRequiredHeader_(headers, 'Drive File ID', 'PDF Review');
-  const statusCol = getRequiredHeader_(headers, 'Review Status', 'PDF Review');
+	const headers = getHeaderMap_(reviewSheet, 1);
+	const fileIdCol = getRequiredHeader_(headers, "Drive File ID", "PDF Review");
+	const statusCol = getRequiredHeader_(headers, "Review Status", "PDF Review");
 
-  const values = reviewSheet
-    .getRange(2, 1, lastRow - 1, reviewSheet.getLastColumn())
-    .getValues();
+	const values = reviewSheet
+		.getRange(2, 1, lastRow - 1, reviewSheet.getLastColumn())
+		.getValues();
 
-  return values.some(function (row) {
-    const rowFileId = row[fileIdCol - 1];
-    const status = (row[statusCol - 1] || '').toString().trim();
+	return values.some((row) => {
+		const rowFileId = row[fileIdCol - 1];
+		const status = (row[statusCol - 1] || "").toString().trim();
 
-    return (
-      (rowFileId || '').toString().trim() === fileId.toString().trim() &&
-      (status === 'Pending' || status === 'Needs Cloud Fix')
-    );
-  });
+		return (
+			(rowFileId || "").toString().trim() === fileId.toString().trim() &&
+			(status === "Pending" || status === "Needs Cloud Fix")
+		);
+	});
 }
 
 /////////////////////////////////////
@@ -269,38 +367,38 @@ function hasBlockingPdfReviewRows_(reviewSheet, fileId) {
 /////////////////////////////////////
 
 function buildIngredientsMasterLookup_(masterValues, masterHeaders) {
-  const lookup = {
-    byCode: {},
-    byFallback: {},
-  };
+	const lookup = {
+		byCode: {},
+		byFallback: {},
+	};
 
-  masterValues.forEach(function (row, index) {
-    const sheetRow = index + 2;
+	masterValues.forEach((row, index) => {
+		const sheetRow = index + 2;
 
-    const supplier = getValueByHeader_(row, masterHeaders, 'Supplier');
-    const itemCode = getOptionalValueByHeader_(row, masterHeaders, 'Item Code');
-    const cleanName = getValueByHeader_(row, masterHeaders, 'Clean Name');
-    const packSize = getValueByHeader_(row, masterHeaders, 'Pack Size');
-    const baseUnit = getValueByHeader_(row, masterHeaders, 'Base Unit');
+		const supplier = getValueByHeader_(row, masterHeaders, "Supplier");
+		const itemCode = getOptionalValueByHeader_(row, masterHeaders, "Item Code");
+		const cleanName = getValueByHeader_(row, masterHeaders, "Clean Name");
+		const packSize = getValueByHeader_(row, masterHeaders, "Pack Size");
+		const baseUnit = getValueByHeader_(row, masterHeaders, "Base Unit");
 
-    const codeKey = makePdfMasterCodeKey_(supplier, itemCode);
-    const fallbackKey = makePdfMasterFallbackKey_(
-      supplier,
-      cleanName,
-      packSize,
-      baseUnit,
-    );
+		const codeKey = makePdfMasterCodeKey_(supplier, itemCode);
+		const fallbackKey = makePdfMasterFallbackKey_(
+			supplier,
+			cleanName,
+			packSize,
+			baseUnit,
+		);
 
-    if (supplier && itemCode && !lookup.byCode[codeKey]) {
-      lookup.byCode[codeKey] = sheetRow;
-    }
+		if (supplier && itemCode && !lookup.byCode[codeKey]) {
+			lookup.byCode[codeKey] = sheetRow;
+		}
 
-    if (supplier && cleanName && packSize && !lookup.byFallback[fallbackKey]) {
-      lookup.byFallback[fallbackKey] = sheetRow;
-    }
-  });
+		if (supplier && cleanName && packSize && !lookup.byFallback[fallbackKey]) {
+			lookup.byFallback[fallbackKey] = sheetRow;
+		}
+	});
 
-  return lookup;
+	return lookup;
 }
 
 /////////////////////////////////////
@@ -308,22 +406,22 @@ function buildIngredientsMasterLookup_(masterValues, masterHeaders) {
 /////////////////////////////////////
 
 function makePdfMasterCodeKey_(supplier, itemCode) {
-  return [normalisePdfKeyPart_(supplier), normalisePdfKeyPart_(itemCode)].join(
-    '|',
-  );
+	return [normalisePdfKeyPart_(supplier), normalisePdfKeyPart_(itemCode)].join(
+		"|",
+	);
 }
 
 function makePdfMasterFallbackKey_(supplier, cleanName, packSize, baseUnit) {
-  return [
-    normalisePdfKeyPart_(supplier),
-    normalisePdfKeyPart_(cleanName),
-    normalisePdfKeyPart_(packSize),
-    normalisePdfKeyPart_(baseUnit),
-  ].join('|');
+	return [
+		normalisePdfKeyPart_(supplier),
+		normalisePdfKeyPart_(cleanName),
+		normalisePdfKeyPart_(packSize),
+		normalisePdfKeyPart_(baseUnit),
+	].join("|");
 }
 
 function normalisePdfKeyPart_(value) {
-  return (value || '').toString().toLowerCase().replace(/\s+/g, ' ').trim();
+	return (value || "").toString().toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 /////////////////////////////////////
@@ -331,16 +429,16 @@ function normalisePdfKeyPart_(value) {
 /////////////////////////////////////
 
 function cleanIngredientNameForPdfAppend_(name) {
-  return (name || '')
-    .toString()
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]/g, ' ')
-    .replace(
-      /\b\d+(\.\d+)?\s*(kg|g|ltr|lt|l|ml|cm|m|x|pk|pack|case|box|bag)\b/g,
-      ' ',
-    )
-    .replace(/\s+/g, ' ')
-    .trim();
+	return (name || "")
+		.toString()
+		.toLowerCase()
+		.replace(/[^a-z0-9 ]/g, " ")
+		.replace(
+			/\b\d+(\.\d+)?\s*(kg|g|ltr|lt|l|ml|cm|m|x|pk|pack|case|box|bag)\b/g,
+			" ",
+		)
+		.replace(/\s+/g, " ")
+		.trim();
 }
 
 /////////////////////////////////////
@@ -348,24 +446,24 @@ function cleanIngredientNameForPdfAppend_(name) {
 /////////////////////////////////////
 
 function appendIngredientsMasterFromPdfRow_(sheet, headers, data) {
-  const newRow = new Array(sheet.getLastColumn()).fill('');
+	const newRow = new Array(sheet.getLastColumn()).fill("");
 
-  setRowByHeaders_(newRow, headers, {
-    'Ingredient ID': makePdfIngredientId_(),
-    'Item Code': data.itemCode,
-    Ingredient: data.description,
-    'Clean Name': data.cleanName,
-    Supplier: data.supplier,
-    'Pack Size': data.packSize,
-    'Pack Qty': data.packQty,
-    'Pack Price (£)': data.packPrice,
-    'Base Unit': data.baseUnit,
-    'Cost per Unit (£)': data.costPerUnit,
-    'Unit Per Pack/Case': data.unitPerCase,
-    Notes: buildPdfAppendNote_('Imported from reviewed PDF', data),
-  });
+	setRowByHeaders_(newRow, headers, {
+		"Ingredient ID": makePdfIngredientId_(),
+		"Item Code": data.itemCode,
+		Ingredient: data.description,
+		"Clean Name": data.cleanName,
+		Supplier: data.supplier,
+		"Pack Size": data.packSize,
+		"Pack Qty": data.packQty,
+		"Pack Price (£)": data.packPrice,
+		"Base Unit": data.baseUnit,
+		"Cost per Unit (£)": data.costPerUnit,
+		"Unit Per Pack/Case": data.unitPerCase,
+		Notes: buildPdfAppendNote_("Imported from reviewed PDF", data),
+	});
 
-  sheet.appendRow(newRow);
+	sheet.appendRow(newRow);
 }
 
 /////////////////////////////////////
@@ -373,39 +471,43 @@ function appendIngredientsMasterFromPdfRow_(sheet, headers, data) {
 /////////////////////////////////////
 
 function updateIngredientsMasterFromPdfRow_(sheet, headers, rowNumber, data) {
-  setCellIfHeaderExists_(sheet, headers, rowNumber, 'Item Code', data.itemCode);
-  setCellIfHeaderExists_(sheet, headers, rowNumber, 'Supplier', data.supplier);
-  setCellIfHeaderExists_(sheet, headers, rowNumber, 'Pack Size', data.packSize);
-  setCellIfHeaderExists_(sheet, headers, rowNumber, 'Pack Qty', data.packQty);
-  setCellIfHeaderExists_(
-    sheet,
-    headers,
-    rowNumber,
-    'Pack Price (£)',
-    data.packPrice,
-  );
-  setCellIfHeaderExists_(sheet, headers, rowNumber, 'Base Unit', data.baseUnit);
-  setCellIfHeaderExists_(
-    sheet,
-    headers,
-    rowNumber,
-    'Cost per Unit (£)',
-    data.costPerUnit,
-  );
-  setCellIfHeaderExists_(
-    sheet,
-    headers,
-    rowNumber,
-    'Unit Per Pack/Case',
-    data.unitPerCase,
-  );
+	setCellIfHeaderExists_(sheet, headers, rowNumber, "Item Code", data.itemCode);
+	setCellIfHeaderExists_(sheet, headers, rowNumber, "Supplier", data.supplier);
+	setCellIfHeaderExists_(sheet, headers, rowNumber, "Pack Size", data.packSize);
+	setCellIfHeaderExists_(sheet, headers, rowNumber, "Pack Qty", data.packQty);
 
-  appendNoteIfHeaderExists_(
-    sheet,
-    headers,
-    rowNumber,
-    buildPdfAppendNote_('Updated from reviewed PDF', data),
-  );
+	setCellIfHeaderExists_(
+		sheet,
+		headers,
+		rowNumber,
+		"Pack Price (£)",
+		data.packPrice,
+	);
+
+	setCellIfHeaderExists_(sheet, headers, rowNumber, "Base Unit", data.baseUnit);
+
+	setCellIfHeaderExists_(
+		sheet,
+		headers,
+		rowNumber,
+		"Cost per Unit (£)",
+		data.costPerUnit,
+	);
+
+	setCellIfHeaderExists_(
+		sheet,
+		headers,
+		rowNumber,
+		"Unit Per Pack/Case",
+		data.unitPerCase,
+	);
+
+	appendNoteIfHeaderExists_(
+		sheet,
+		headers,
+		rowNumber,
+		buildPdfAppendNote_("Updated from reviewed PDF", data),
+	);
 }
 
 /////////////////////////////////////
@@ -413,26 +515,26 @@ function updateIngredientsMasterFromPdfRow_(sheet, headers, rowNumber, data) {
 /////////////////////////////////////
 
 function buildPdfAppendNote_(prefix, data) {
-  let note =
-    prefix +
-    ' | Pack Price from Unit Price: £' +
-    data.packPrice +
-    ' | Cases: ' +
-    (data.cases || '') +
-    ' | Line Total: £' +
-    (data.lineTotal || '');
+	let note =
+		prefix +
+		" | Pack Price from Unit Price: £" +
+		data.packPrice +
+		" | Cases: " +
+		(data.cases || "") +
+		" | Line Total: £" +
+		(data.lineTotal || "");
 
-  if (data.packParseFlag && data.packParseFlag !== 'OK') {
-    note += ' | Pack Parse: ' + data.packParseFlag;
-  }
+	if (data.packParseFlag && data.packParseFlag !== "OK") {
+		note += " | Pack Parse: " + data.packParseFlag;
+	}
 
-  if (data.packParseNotes) {
-    note += ' | ' + data.packParseNotes;
-  }
+	if (data.packParseNotes) {
+		note += " | " + data.packParseNotes;
+	}
 
-  note += ' | ' + new Date();
+	note += " | " + new Date();
 
-  return note;
+	return note;
 }
 
 /////////////////////////////////////
@@ -440,31 +542,41 @@ function buildPdfAppendNote_(prefix, data) {
 /////////////////////////////////////
 
 function setCellIfHeaderExists_(sheet, headers, rowNumber, headerName, value) {
-  const col = headers[headerName];
-  if (!col) return;
+	const col = headers[headerName];
+	if (!col) return;
 
-  sheet.getRange(rowNumber, col).setValue(value);
+	sheet.getRange(rowNumber, col).setValue(value);
 }
 
 function appendNoteIfHeaderExists_(sheet, headers, rowNumber, noteText) {
-  const col = headers['Notes'];
-  if (!col) return;
+	const col = headers["Notes"];
+	if (!col) return;
 
-  sheet.getRange(rowNumber, col).setValue(noteText);
+	const cell = sheet.getRange(rowNumber, col);
+	const existing = (cell.getValue() || "").toString().trim();
+
+	const cleanedNote = (noteText || "").toString().replace(/\s+/g, " ").trim();
+
+	if (!existing) {
+		cell.setValue(cleanedNote);
+		return;
+	}
+
+	cell.setValue(existing + " | " + cleanedNote);
 }
 
 function makePdfIngredientId_() {
-  return 'ING-' + Utilities.getUuid().slice(0, 8).toUpperCase();
+	return "ING-" + Utilities.getUuid().slice(0, 8).toUpperCase();
 }
 
 function toPdfNumber_(value) {
-  if (value === null || value === undefined || value === '') return '';
+	if (value === null || value === undefined || value === "") return "";
 
-  const cleaned = value.toString().replace(/[£,]/g, '').trim();
+	const cleaned = value.toString().replace(/[£,]/g, "").trim();
 
-  const num = Number(cleaned);
+	const num = Number(cleaned);
 
-  return isNaN(num) ? '' : num;
+	return isNaN(num) ? "" : num;
 }
 
 /////////////////////////////////////
@@ -472,36 +584,42 @@ function toPdfNumber_(value) {
 /////////////////////////////////////
 
 function formatIngredientsMasterCostingColumns_() {
-  const ss = SpreadsheetApp.getActive();
-  const sheet = ss.getSheetByName('Ingredients Master');
+	const ss = SpreadsheetApp.getActive();
+	const sheet = ss.getSheetByName("Ingredients Master");
 
-  if (!sheet) return;
+	if (!sheet) return;
 
-  const headers = getHeaderMap_(sheet, 1);
-  const lastRow = Math.max(sheet.getLastRow(), 2);
-  const rowCount = lastRow - 1;
+	const headers = getHeaderMap_(sheet, 1);
+	const lastRow = Math.max(sheet.getLastRow(), 2);
+	const rowCount = lastRow - 1;
 
-  if (headers['Pack Qty']) {
-    sheet
-      .getRange(2, headers['Pack Qty'], rowCount, 1)
-      .setNumberFormat('0.####');
-  }
+	if (headers["Pack Qty"]) {
+		sheet
+			.getRange(2, headers["Pack Qty"], rowCount, 1)
+			.setNumberFormat("0.####");
+	}
 
-  if (headers['Pack Price (£)']) {
-    sheet
-      .getRange(2, headers['Pack Price (£)'], rowCount, 1)
-      .setNumberFormat('£0.00');
-  }
+	if (headers["Pack Price (£)"]) {
+		sheet
+			.getRange(2, headers["Pack Price (£)"], rowCount, 1)
+			.setNumberFormat("£0.00");
+	}
 
-  if (headers['Cost per Unit (£)']) {
-    sheet
-      .getRange(2, headers['Cost per Unit (£)'], rowCount, 1)
-      .setNumberFormat('£0.0000');
-  }
+	if (headers["Cost per Unit (£)"]) {
+		sheet
+			.getRange(2, headers["Cost per Unit (£)"], rowCount, 1)
+			.setNumberFormat("£0.0000");
+	}
 
-  if (headers['Unit Per Pack/Case']) {
-    sheet
-      .getRange(2, headers['Unit Per Pack/Case'], rowCount, 1)
-      .setNumberFormat('0.####');
-  }
+	if (headers["Unit Per Pack/Case"]) {
+		sheet
+			.getRange(2, headers["Unit Per Pack/Case"], rowCount, 1)
+			.setNumberFormat("0.####");
+	}
+
+	sheet.autoResizeColumns(1, sheet.getLastColumn());
+
+	if (!sheet.getFilter()) {
+		sheet.getDataRange().createFilter();
+	}
 }
