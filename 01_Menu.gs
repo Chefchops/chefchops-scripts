@@ -6,7 +6,6 @@ function onOpen() {
   buildChefchopsMenu_();
 }
 
-
 /////////////////////////////////////
 // CHEFCHOPS MENU
 // CLEAN CURRENT LIVE PIPELINE ONLY
@@ -22,18 +21,49 @@ function buildChefchopsMenu_() {
     /////////////////////////////////////
 
     .addSubMenu(
-      ui.createMenu('PDF Pipeline')
+      ui
+        .createMenu('PDF Pipeline')
+
+        /////////////////////////////////////
+        // STEP 1 - IMPORT
+        /////////////////////////////////////
 
         .addItem('1. Import PDFs From Drive', 'importPdfJobsFromDriveFolder')
-        .addItem('2. Process Last PDF (Cloud)', 'processLastPdfRow_')
 
         .addSeparator()
 
-        .addItem('3. Build Header + Extracted Lines + Review', 'runBuildExtractedLinesFromPdfJson')
+        /////////////////////////////////////
+        // STEP 2 - CLOUD PROCESSING
+        /////////////////////////////////////
+
+        .addItem('2. Process Next 5 PDFs (Cloud)', 'processNext5PendingPdfRows')
 
         .addSeparator()
 
-        .addItem('4. Append Reviewed PDF to Ingredients Master', 'appendReviewedPdfExtractedLinesToIngredientsMaster')
+        /////////////////////////////////////
+        // STEP 3 - BUILD HEADER + REVIEW
+        /////////////////////////////////////
+
+        .addItem(
+          '3. Build Next 5 Stored PDFs + Review',
+          'buildNext5StoredPdfJsonFiles',
+        )
+
+        .addItem(
+          '3.1 Build Latest Stored PDF + Review',
+          'runBuildExtractedLinesFromPdfJson',
+        )
+
+        .addSeparator()
+
+        /////////////////////////////////////
+        // STEP 4 - CORRECTIONS + APPEND
+        /////////////////////////////////////
+
+        .addItem(
+          '4. Apply Corrections + Append to Ingredients Master',
+          'applyReviewCorrectionsThenAppendPdf',
+        ),
     )
 
     /////////////////////////////////////
@@ -41,25 +71,30 @@ function buildChefchopsMenu_() {
     /////////////////////////////////////
 
     .addSubMenu(
-      ui.createMenu('PDF Review')
+      ui
+        .createMenu('PDF Review')
 
         .addItem('Setup Review Sheet', 'setupPdfReviewSheet')
-        .addItem('Apply Review Corrections', 'applyPdfReviewCorrections')
+        .addItem('Apply Review Corrections Only', 'applyPdfReviewCorrections')
         .addItem('Highlight Missing Fields', 'highlightPdfReviewMissingFields')
 
         .addSeparator()
 
-        .addItem('Clear Review Sheet', 'clearPdfReviewSheet')
+        .addItem('Clear Review Sheet', 'clearPdfReviewSheet'),
     )
-/////////////////////////////////////
-// PRICE TOOLS
-/////////////////////////////////////
+
+    /////////////////////////////////////
+    // PRICE TOOLS
+    /////////////////////////////////////
 
     .addSubMenu(
-      ui.createMenu('Price Tools')
+      ui
+        .createMenu('Price Tools')
+
         .addItem('Setup Price Search', 'setupPriceSearchSheet')
         .addItem('Run Price Search', 'runPriceSearch')
-        .addItem('Clear Price Search', 'clearPriceSearchResults')
+        .addItem('Clear Price Search', 'clearPriceSearchResults'),
     )
+
     .addToUi();
 }

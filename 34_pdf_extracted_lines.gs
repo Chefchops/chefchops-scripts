@@ -3,26 +3,24 @@
 /////////////////////////////////////
 
 function buildExtractedLinesFromPdfJson_(fileId) {
-  const ss = SpreadsheetApp.getActive();
-
   if (!fileId) throw new Error('Missing fileId.');
 
   const json = rebuildJsonFromChunks_(fileId);
-  const meta = getPdfJsonMetaByFileId_(fileId);
+  const meta = getPdfJsonMetaByFileId_(fileId) || {};
 
-  const invoiceHeader =
-  json.invoiceHeader ||
-  json.invoice_header ||
-  {};
+  const invoiceHeader = json.invoiceHeader || json.invoice_header || {};
 
-const resolvedSite =
-  json.site ||
-  invoiceHeader.siteName ||
-  invoiceHeader.site_name ||
-  meta.site ||
-  '';
+  const resolvedSite =
+    json.site ||
+    invoiceHeader.siteName ||
+    invoiceHeader.site_name ||
+    meta.site ||
+    '';
 
-  const supplier = (json.supplier || meta.supplier || '').toString().trim().toLowerCase();
+  const supplier = (json.supplier || meta.supplier || '')
+    .toString()
+    .trim()
+    .toLowerCase();
 
   let rows = [];
   let sourceType = '';
@@ -40,39 +38,41 @@ const resolvedSite =
 
   if (!rows.length) {
     SpreadsheetApp.getUi().alert(
-      'No invoice rows found in JSON for supplier: ' + (json.supplier || meta.supplier || '')
+      'No invoice rows found in JSON for supplier: ' +
+        (json.supplier || meta.supplier || ''),
     );
     return 0;
   }
 
   const sheet = getOrCreatePdfExtractedLinesSheet_();
+
   clearExtractedLinesForFile_(sheet, fileId);
 
-const output = rows.map((row, index) => {
-  return [
-    meta && meta.uploadTime ? meta.uploadTime : new Date(),
-    json.fileName || (meta && meta.fileName) || '',
-    json.supplier || (meta && meta.supplier) || '',
-    resolvedSite,
-    fileId,
-    index + 1,
-    index + 1,
-    sourceType,
-    '',
-    '',
-    row.cases || '',
-    row.units_weight || '',
-    row.base_unit || '',
-    row.description || '',
-    row.pack_size || '',
-    row.item_code || '',
-    row.unit_price || '',
-    row.line_total || '',
-    row.vat || row.vat_rate || '',
-    row.vat_total || '',
-    row.reviewFlag || ''
-  ];
-});
+  const output = rows.map(function (row, index) {
+    return [
+      meta.uploadTime || new Date(),
+      json.fileName || meta.fileName || '',
+      json.supplier || meta.supplier || '',
+      resolvedSite,
+      fileId,
+      index + 1,
+      index + 1,
+      sourceType,
+      '',
+      '',
+      row.cases || '',
+      row.units_weight || '',
+      row.base_unit || '',
+      row.description || '',
+      row.pack_size || '',
+      row.item_code || '',
+      row.unit_price || '',
+      row.line_total || '',
+      row.vat || row.vat_rate || '',
+      row.vat_total || '',
+      row.reviewFlag || '',
+    ];
+  });
 
   const startRow = Math.max(sheet.getLastRow() + 1, 2);
 
@@ -83,6 +83,43 @@ const output = rows.map((row, index) => {
   return output.length;
 }
 
+/////////////////////////////////////
+// BUILD HEADER + EXTRACTED LINES + REVIEW FOR FILE
+/////////////////////////////////////
+
+function buildPdfHeaderExtractedLinesAndReviewForFile_(fileId) {
+  if (!fileId) throw new Error('Missing fileId.');
+
+  /////////////////////////////////////
+  // 1. BUILD / UPDATE PDF INVOICE HEADER
+  /////////////////////////////////////
+
+  buildPdfInvoiceHeaderFromLatestJson_(fileId);
+
+  /////////////////////////////////////
+  // 2. BUILD PDF EXTRACTED LINES
+  /////////////////////////////////////
+
+  const extractedCount = buildExtractedLinesFromPdfJson_(fileId);
+
+  /////////////////////////////////////
+  // 3. BUILD PDF REVIEW SILENTLY
+  /////////////////////////////////////
+
+  buildPdfReviewFromExtractedLines(fileId, { silent: true });
+
+  /////////////////////////////////////
+  // 4. COUNT REVIEW ROWS
+  /////////////////////////////////////
+
+  const reviewResult = getPdfReviewPopupResultForFile_(fileId);
+
+  return {
+    extractedCount: extractedCount,
+    reviewCount: reviewResult.reviewCount,
+    popupLines: reviewResult.popupLines,
+  };
+}
 
 /////////////////////////////////////
 // RUN HEADER + EXTRACTED LINES + REVIEW
@@ -100,64 +137,40 @@ function runBuildExtractedLinesFromPdfJson() {
       return;
     }
 
-    /////////////////////////////////////
-    // 1. BUILD / UPDATE PDF INVOICE HEADER
-    /////////////////////////////////////
+    const result = buildPdfHeaderExtractedLinesAndReviewForFile_(fileId);
 
-    buildPdfInvoiceHeaderFromLatestJson_(fileId);
-
-    /////////////////////////////////////
-    // 2. BUILD PDF EXTRACTED LINES
-    /////////////////////////////////////
-
-    buildExtractedLinesFromPdfJson_(fileId);
-
-    /////////////////////////////////////
-    // 3. BUILD PDF REVIEW SILENTLY
-    /////////////////////////////////////
-
-    buildPdfReviewFromExtractedLines(fileId, { silent: true });
-
-    /////////////////////////////////////
-    // 4. FINAL POPUP BASED ON ACTUAL REVIEW SHEET
-    /////////////////////////////////////
-
-    const reviewResult = getPdfReviewPopupResultForFile_(fileId);
-
-    const reviewCount = reviewResult.reviewCount;
-    const popupLines = reviewResult.popupLines;
-
-    if (reviewCount > 0) {
+    if (result.reviewCount > 0) {
       ui.alert(
         'PDF build complete.\n\n' +
-        'Done:\n' +
-        '1. PDF Invoice Headers updated\n' +
-        '2. PDF Extracted Lines built\n' +
-        '3. PDF Review built\n\n' +
-        'Rows needing review: ' + reviewCount + '\n\n' +
-        popupLines.slice(0, 15).join('\n\n') +
-        (popupLines.length > 15 ? '\n\nMore rows exist in PDF Review.' : '')
+          'Done:\n' +
+          '1. PDF Invoice Headers updated\n' +
+          '2. PDF Extracted Lines built\n' +
+          '3. PDF Review built\n\n' +
+          'Rows needing review: ' +
+          result.reviewCount +
+          '\n\n' +
+          result.popupLines.slice(0, 15).join('\n\n') +
+          (result.popupLines.length > 15
+            ? '\n\nMore rows exist in PDF Review.'
+            : ''),
       );
     } else {
       ui.alert(
         'PDF build complete.\n\n' +
-        'Done:\n' +
-        '1. PDF Invoice Headers updated\n' +
-        '2. PDF Extracted Lines built\n' +
-        '3. PDF Review built\n\n' +
-        'No rows need review.'
+          'Done:\n' +
+          '1. PDF Invoice Headers updated\n' +
+          '2. PDF Extracted Lines built\n' +
+          '3. PDF Review built\n\n' +
+          'No rows need review.',
       );
     }
-
   } catch (err) {
     ui.alert(
-      'PDF build failed:\n\n' +
-      (err && err.message ? err.message : err)
+      'PDF build failed:\n\n' + (err && err.message ? err.message : err),
     );
     throw err;
   }
 }
-
 
 /////////////////////////////////////
 // GET PDF REVIEW POPUP RESULT FOR FILE
@@ -171,7 +184,7 @@ function getPdfReviewPopupResultForFile_(fileId) {
   if (!sheet) {
     return {
       reviewCount: 0,
-      popupLines: []
+      popupLines: [],
     };
   }
 
@@ -180,7 +193,7 @@ function getPdfReviewPopupResultForFile_(fileId) {
   if (lastRow < 2) {
     return {
       reviewCount: 0,
-      popupLines: []
+      popupLines: [],
     };
   }
 
@@ -201,7 +214,7 @@ function getPdfReviewPopupResultForFile_(fileId) {
 
   const popupLines = [];
 
-  data.forEach(row => {
+  data.forEach(function (row) {
     const rowFileId = row[fileIdCol - 1]
       ? row[fileIdCol - 1].toString().trim()
       : '';
@@ -221,20 +234,21 @@ function getPdfReviewPopupResultForFile_(fileId) {
     const notes = notesCol ? row[notesCol - 1] : '';
 
     popupLines.push(
-      'Row ' + rowNo + ': ' +
-      desc +
-      (packSize ? '\nPack Size: ' + packSize : '') +
-      (itemCode ? '\nItem Code: ' + itemCode : '') +
-      (notes ? '\nNotes: ' + notes : '')
+      'Row ' +
+        rowNo +
+        ': ' +
+        desc +
+        (packSize ? '\nPack Size: ' + packSize : '') +
+        (itemCode ? '\nItem Code: ' + itemCode : '') +
+        (notes ? '\nNotes: ' + notes : ''),
     );
   });
 
   return {
     reviewCount: popupLines.length,
-    popupLines: popupLines
+    popupLines: popupLines,
   };
 }
-
 
 /////////////////////////////////////
 // GET LATEST PDF JSON DRIVE FILE ID
@@ -250,14 +264,17 @@ function getLatestPdfJsonDriveFileIdForPipeline_() {
   }
 
   const lastRow = sheet.getLastRow();
+
   if (lastRow < 2) return '';
 
   const headers = getHeaderMap_(sheet, 1);
-  const driveFileIdCol = getRequiredHeader_(headers, 'Drive File ID');
+  const driveFileIdCol = getRequiredHeader_(
+    headers,
+    'Drive File ID',
+    'PDF JSON Staging',
+  );
 
-  const values = sheet
-    .getRange(2, driveFileIdCol, lastRow - 1, 1)
-    .getValues();
+  const values = sheet.getRange(2, driveFileIdCol, lastRow - 1, 1).getValues();
 
   for (let i = values.length - 1; i >= 0; i--) {
     const fileId = values[i][0];
@@ -269,7 +286,6 @@ function getLatestPdfJsonDriveFileIdForPipeline_() {
 
   return '';
 }
-
 
 /////////////////////////////////////
 // PDF EXTRACTED LINES HEADERS
@@ -297,10 +313,9 @@ function getPdfExtractedLinesHeaders_() {
     'Line Total',
     'VAT',
     'VAT Total',
-    'Review Flag'
+    'Review Flag',
   ];
 }
-
 
 /////////////////////////////////////
 // GET OR CREATE PDF EXTRACTED LINES SHEET
@@ -326,17 +341,21 @@ function getOrCreatePdfExtractedLinesSheet_() {
   return sheet;
 }
 
-
 /////////////////////////////////////
 // CLEAR EXTRACTED LINES FOR FILE
 /////////////////////////////////////
 
 function clearExtractedLinesForFile_(sheet, fileId) {
   const lastRow = sheet.getLastRow();
+
   if (lastRow < 2) return;
 
   const headerMap = getHeaderMap_(sheet, 1);
-  const fileIdCol = getRequiredHeader_(headerMap, 'Drive File ID', 'PDF Extracted Lines');
+  const fileIdCol = getRequiredHeader_(
+    headerMap,
+    'Drive File ID',
+    'PDF Extracted Lines',
+  );
 
   const fileIds = sheet
     .getRange(2, fileIdCol, lastRow - 1, 1)
@@ -345,7 +364,7 @@ function clearExtractedLinesForFile_(sheet, fileId) {
 
   const rowsToDelete = [];
 
-  fileIds.forEach((value, index) => {
+  fileIds.forEach(function (value, index) {
     if ((value || '').toString().trim() === fileId.toString().trim()) {
       rowsToDelete.push(index + 2);
     }
@@ -356,54 +375,6 @@ function clearExtractedLinesForFile_(sheet, fileId) {
   deleteRowsInGroups_(sheet, rowsToDelete);
 }
 
-
-/////////////////////////////////////
-// TEST BUILD EXTRACTED LINES ONLY
-/////////////////////////////////////
-
-function testBuildExtractedLinesFromPdfJson() {
-  const fileId = Browser.inputBox('Enter Drive File ID to build Extracted Lines');
-
-  if (!fileId || fileId === 'cancel') return;
-
-  const count = buildExtractedLinesFromPdfJson_(fileId);
-
-  SpreadsheetApp.getUi().alert(
-    'PDF Extracted Lines built successfully.\n\n' +
-    'Rows written: ' + count
-  );
-}
-
-
-/////////////////////////////////////
-// TEST BUILD EXTRACTED LINES + REVIEW
-/////////////////////////////////////
-
-function testBuildExtractedLinesAndReviewFromPdfJson() {
-  const fileId = Browser.inputBox('Enter Drive File ID to build Extracted Lines + Review');
-
-  if (!fileId || fileId === 'cancel') return;
-
-  const extractedCount = buildExtractedLinesFromPdfJson_(fileId);
-
-  let reviewCount = 0;
-
-  if (typeof buildPdfReviewFromExtractedLines === 'function') {
-    buildPdfReviewFromExtractedLines(fileId, { silent: true });
-
-    const reviewResult = getPdfReviewPopupResultForFile_(fileId);
-
-    reviewCount = reviewResult.reviewCount;
-  }
-
-  SpreadsheetApp.getUi().alert(
-    'PDF Extracted Lines + Review built successfully.\n\n' +
-    'Extracted rows: ' + extractedCount + '\n' +
-    'Rows needing review: ' + reviewCount
-  );
-}
-
-
 /////////////////////////////////////
 // HEADER VALUE HELPERS
 /////////////////////////////////////
@@ -412,7 +383,6 @@ function getValueByHeader_(row, headerMap, headerName) {
   const col = getRequiredHeader_(headerMap, headerName, 'Header lookup');
   return row[col - 1];
 }
-
 
 function getOptionalValueByHeader_(row, headerMap, headerName) {
   const col = headerMap[headerName];
